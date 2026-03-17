@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartNotes Admin Console</title>
+    <style>
+        /* ===== Reset & Base ===== */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --primary-light: #e0e7ff;
+            --primary-dark: #3730a3;
+            --bg: #f1f5f9;
+            --surface: #ffffff;
+            --text: #1e293b;
+            --text-secondary: #64748b;
+            --border: #e2e8f0;
+            --danger: #ef4444;
+            --danger-hover: #dc2626;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+            --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+            --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+            --radius: 8px;
+            --radius-lg: 12px;
+            --sidebar-width: 240px;
+            --header-height: 60px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        /* ===== Auth Screen ===== */
+        .auth-screen {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+            padding: 20px;
+        }
+
+        .auth-card {
+            background: var(--surface);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+            width: 100%;
+            max-width: 420px;
+            overflow: hidden;
+        }
+
+        .auth-header {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 24px 32px;
+            text-align: center;
+        }
+
+        .auth-header h1 { font-size: 24px; font-weight: 700; }
+        .auth-header .admin-badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 2px 10px;
+            border-radius: 9999px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            margin-top: 6px;
+        }
+
+        .auth-tabs {
+            display: flex;
+            border-bottom: 2px solid var(--border);
+        }
+
+        .auth-tab {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border: none;
+            background: none;
+            transition: all 0.2s;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+        }
+
+        .auth-tab:hover { color: var(--primary); }
+        .auth-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+        .auth-body { padding: 24px 32px 32px; }
+
+        .auth-form { display: none; }
+        .auth-form.active { display: block; }
+
+        .form-group { margin-bottom: 16px; }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 14px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            outline: none;
+        }
+
+        .form-group input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-light);
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 20px;
+            border-radius: var(--radius);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+            text-decoration: none;
+            gap: 6px;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+            width: 100%;
+        }
+        .btn-primary:hover { background: var(--primary-hover); }
+
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-danger:hover { background: var(--danger-hover); }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text);
+        }
+        .btn-outline:hover { background: var(--bg); border-color: var(--text-secondary); }
+
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+        .alert {
+            padding: 10px 14px;
+            border-radius: var(--radius);
+            font-size: 13px;
+            margin-bottom: 16px;
+            display: none;
+        }
+        .alert-error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+        .alert-success { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+        .alert.show { display: block; }
+
+        /* ===== Access Denied ===== */
+        .access-denied {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: var(--bg);
+            padding: 20px;
+        }
+
+        .access-denied-card {
+            background: var(--surface);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+            padding: 48px;
+            text-align: center;
+            max-width: 400px;
+        }
+
+        .access-denied-card .icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        .access-denied-card h2 {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 8px;
+        }
+
+        .access-denied-card p {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+        }
+
+        /* ===== App Layout ===== */
+        .app { display: none; min-height: 100vh; }
+        .app.active { display: flex; }
+
+        /* Sidebar */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .sidebar-brand {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .sidebar-brand .logo {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 16px;
+        }
+
+        .sidebar-brand .brand-text { display: flex; flex-direction: column; }
+        .sidebar-brand .brand-text span:first-child { font-size: 16px; font-weight: 700; color: var(--text); }
+        .sidebar-brand .brand-text span:last-child { font-size: 10px; color: var(--primary); font-weight: 600; letter-spacing: 1px; text-transform: uppercase; }
+
+        .sidebar-nav { flex: 1; padding: 12px; }
+
+        .nav-section-title {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 12px 12px 4px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: var(--radius);
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.15s;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+        }
+
+        .nav-item:hover { background: var(--bg); color: var(--text); }
+        .nav-item.active { background: var(--primary-light); color: var(--primary); }
+
+        .nav-item .icon {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        /* Main content area */
+        .main-area {
+            flex: 1;
+            margin-left: var(--sidebar-width);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .main-header {
+            height: var(--header-height);
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .main-header h2 { font-size: 18px; font-weight: 600; }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .user-info .username { font-size: 14px; font-weight: 500; color: var(--text-secondary); }
+
+        .admin-badge-header {
+            display: inline-block;
+            background: var(--primary-light);
+            color: var(--primary);
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+
+        .main-content { flex: 1; padding: 24px; }
+
+        .page { display: none; }
+        .page.active { display: block; }
+
+        /* Cards */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 20px;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .card-header h3 { font-size: 16px; font-weight: 600; }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .stat-card .stat-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            flex-shrink: 0;
+        }
+
+        .stat-card .stat-icon.notes { background: #ede9fe; }
+        .stat-card .stat-icon.docs { background: #e0e7ff; }
+        .stat-card .stat-icon.users { background: #fce7f3; }
+        .stat-card .stat-icon.sync { background: #dbeafe; }
+
+        .stat-card .stat-info h4 { font-size: 24px; font-weight: 700; color: var(--text); line-height: 1.2; }
+        .stat-card .stat-info p { font-size: 13px; color: var(--text-secondary); }
+
+        /* Admin banner */
+        .admin-banner {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            border-radius: var(--radius-lg);
+            padding: 32px;
+            margin-bottom: 24px;
+        }
+
+        .admin-banner h2 { font-size: 24px; margin-bottom: 8px; }
+        .admin-banner p { opacity: 0.85; font-size: 15px; }
+
+        /* Table styles */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        .data-table thead th {
+            text-align: left;
+            padding: 10px 12px;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid var(--border);
+        }
+
+        .data-table tbody td {
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text);
+        }
+
+        .data-table tbody tr:hover { background: var(--bg); }
+        .data-table tbody tr:last-child td { border-bottom: none; }
+
+        .placeholder-msg {
+            text-align: center;
+            padding: 32px 20px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .placeholder-msg .icon { font-size: 36px; margin-bottom: 8px; opacity: 0.4; }
+
+        /* Notes list */
+        .notes-list { display: flex; flex-direction: column; gap: 8px; }
+
+        .note-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            transition: box-shadow 0.15s;
+        }
+
+        .note-item:hover { box-shadow: var(--shadow); }
+        .note-item .note-info { flex: 1; min-width: 0; }
+        .note-item .note-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .note-item .note-meta { font-size: 12px; color: var(--text-secondary); margin-top: 2px; display: flex; align-items: center; gap: 8px; }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .badge-normal { background: #ede9fe; color: #5b21b6; }
+        .badge-important { background: #fef3c7; color: #92400e; }
+        .badge-archive { background: #f1f5f9; color: #475569; }
+
+        .note-item .note-actions { display: flex; gap: 8px; flex-shrink: 0; margin-left: 12px; }
+
+        /* Sync status */
+        .sync-info { display: flex; flex-direction: column; gap: 16px; }
+        .sync-field { display: flex; flex-direction: column; gap: 4px; }
+        .sync-field label { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+        .sync-field .value { font-size: 14px; color: var(--text); font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace; }
+
+        /* Status indicator */
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+
+        .status-dot.active { background: var(--success); }
+        .status-dot.inactive { background: var(--text-secondary); }
+
+        /* Loading */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Empty state */
+        .empty-state { text-align: center; padding: 40px 20px; color: var(--text-secondary); }
+        .empty-state .icon { font-size: 40px; margin-bottom: 12px; opacity: 0.4; }
+        .empty-state p { font-size: 14px; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar { width: 60px; }
+            .sidebar .sidebar-brand .brand-text { display: none; }
+            .sidebar .nav-item span { display: none; }
+            .sidebar .nav-item { justify-content: center; padding: 10px; }
+            .sidebar .nav-section-title { display: none; }
+            .main-area { margin-left: 60px; }
+            .stats-grid { grid-template-columns: 1fr; }
+            .data-table { font-size: 12px; }
+            .data-table thead th, .data-table tbody td { padding: 8px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ===== Auth Screen ===== -->
+    <div class="auth-screen" id="authScreen">
+        <div class="auth-card">
+            <div class="auth-header">
+                <h1>SmartNotes Admin</h1>
+                <div class="admin-badge">Administration Panel</div>
+            </div>
+            <div class="auth-tabs">
+                <button class="auth-tab active" onclick="switchTab('login')">Login</button>
+                <button class="auth-tab" onclick="switchTab('register')">Register</button>
+            </div>
+            <div class="auth-body">
+                <div class="alert" id="authAlert"></div>
+                <form class="auth-form active" id="loginForm" onsubmit="handleLogin(event)">
+                    <div class="form-group">
+                        <label for="loginUsername">Username</label>
+                        <input type="text" id="loginUsername" placeholder="Enter your username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Password</label>
+                        <input type="password" id="loginPassword" placeholder="Enter your password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="loginBtn">Sign In</button>
+                </form>
+                <form class="auth-form" id="registerForm" onsubmit="handleRegister(event)">
+                    <div class="form-group">
+                        <label for="regUsername">Username</label>
+                        <input type="text" id="regUsername" placeholder="Choose a username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="regEmail">Email (optional)</label>
+                        <input type="email" id="regEmail" placeholder="your@email.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="regPassword">Password</label>
+                        <input type="password" id="regPassword" placeholder="Choose a password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="registerBtn">Create Account</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== Access Denied Screen ===== -->
+    <div class="access-denied" id="accessDenied" style="display: none;">
+        <div class="access-denied-card">
+            <div class="icon">&#128274;</div>
+            <h2>Access Denied</h2>
+            <p>You do not have administrator privileges to access this page. Please contact your system administrator if you believe this is an error.</p>
+            <button class="btn btn-primary" onclick="handleLogout()" style="width: auto;">Return to Login</button>
+        </div>
+    </div>
+
+    <!-- ===== Main App ===== -->
+    <div class="app" id="app">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <div class="logo">A</div>
+                <div class="brand-text">
+                    <span>SmartNotes</span>
+                    <span>Admin Panel</span>
+                </div>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section-title">Overview</div>
+                <button class="nav-item active" onclick="navigateTo('dashboard')">
+                    <span class="icon">&#9632;</span>
+                    <span>Dashboard</span>
+                </button>
+                <button class="nav-item" onclick="navigateTo('sync')">
+                    <span class="icon">&#128260;</span>
+                    <span>System Status</span>
+                </button>
+
+                <div class="nav-section-title">Management</div>
+                <button class="nav-item" onclick="navigateTo('users')">
+                    <span class="icon">&#128101;</span>
+                    <span>User Management</span>
+                </button>
+                <button class="nav-item" onclick="navigateTo('notes')">
+                    <span class="icon">&#9998;</span>
+                    <span>All Notes</span>
+                </button>
+            </nav>
+        </aside>
+
+        <!-- Main Area -->
+        <div class="main-area">
+            <header class="main-header">
+                <h2 id="pageTitle">Admin Dashboard</h2>
+                <div class="user-info">
+                    <span class="admin-badge-header">ADMIN</span>
+                    <span class="username" id="displayUsername"></span>
+                    <button class="btn btn-outline btn-sm" onclick="handleLogout()">Logout</button>
+                </div>
+            </header>
+
+            <div class="main-content">
+                <!-- Admin Dashboard -->
+                <div class="page active" id="page-dashboard">
+                    <div class="admin-banner">
+                        <h2>Admin Dashboard</h2>
+                        <p>System overview and management controls for SmartNotes.</p>
+                    </div>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon notes">&#128221;</div>
+                            <div class="stat-info">
+                                <h4 id="statNotes">-</h4>
+                                <p>Total Notes</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon docs">&#128196;</div>
+                            <div class="stat-info">
+                                <h4 id="statDocuments">-</h4>
+                                <p>Total Documents</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon users">&#128101;</div>
+                            <div class="stat-info">
+                                <h4 id="statUsers">-</h4>
+                                <p>Users</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon sync">&#9889;</div>
+                            <div class="stat-info">
+                                <h4 id="statSync">Active</h4>
+                                <p>System Status</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>System Information</h3>
+                        </div>
+                        <table class="data-table">
+                            <tbody>
+                                <tr>
+                                    <td style="font-weight: 600; color: var(--text-secondary); width: 200px;">Application</td>
+                                    <td>SmartNotes v2.0</td>
+                                </tr>
+                                <tr>
+                                    <td style="font-weight: 600; color: var(--text-secondary);">Environment</td>
+                                    <td id="envInfo">Production</td>
+                                </tr>
+                                <tr>
+                                    <td style="font-weight: 600; color: var(--text-secondary);">Server Time</td>
+                                    <td id="serverTime">-</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- System Status Page -->
+                <div class="page" id="page-sync">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Sync Status</h3>
+                            <button class="btn btn-outline btn-sm" onclick="loadSyncStatus()">Refresh</button>
+                        </div>
+                        <div id="syncInfoContainer">
+                            <div class="loading"><div class="spinner"></div> Loading sync status...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- User Management Page -->
+                <div class="page" id="page-users">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>User Management</h3>
+                        </div>
+                        <div class="placeholder-msg">
+                            <div class="icon">&#128101;</div>
+                            <p>User management is coming soon.</p>
+                            <p style="margin-top: 4px; font-size: 12px;">This feature will allow admins to view, enable, and disable user accounts.</p>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>All Users</h3>
+                        </div>
+                        <div class="placeholder-msg">
+                            <div class="icon">&#128203;</div>
+                            <p>User listing coming soon.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- All Notes Page -->
+                <div class="page" id="page-notes">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>All Notes</h3>
+                            <button class="btn btn-outline btn-sm" onclick="loadNotes()">Refresh</button>
+                        </div>
+                        <div id="notesListContainer">
+                            <div class="loading"><div class="spinner"></div> Loading notes...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===== State =====
+        let token = localStorage.getItem('smartnotes_token');
+        let currentUser = null;
+        let currentPage = 'dashboard';
+
+        // ===== API Helper =====
+        async function api(url, options = {}) {
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) {
+                headers['Authorization'] = 'Bearer ' + token;
+            }
+            try {
+                const resp = await fetch(url, { ...options, headers });
+                if (resp.status === 401) {
+                    clearAuth();
+                    showAuthScreen();
+                    return null;
+                }
+                return await resp.json();
+            } catch (err) {
+                console.error('API Error:', err);
+                throw err;
+            }
+        }
+
+        // ===== Auth =====
+        function switchTab(tab) {
+            document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+            if (tab === 'login') {
+                document.querySelectorAll('.auth-tab')[0].classList.add('active');
+                document.getElementById('loginForm').classList.add('active');
+            } else {
+                document.querySelectorAll('.auth-tab')[1].classList.add('active');
+                document.getElementById('registerForm').classList.add('active');
+            }
+            hideAlert();
+        }
+
+        function showAlert(msg, type) {
+            const el = document.getElementById('authAlert');
+            el.textContent = msg;
+            el.className = 'alert alert-' + type + ' show';
+        }
+
+        function hideAlert() {
+            const el = document.getElementById('authAlert');
+            el.className = 'alert';
+        }
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            hideAlert();
+            const btn = document.getElementById('loginBtn');
+            btn.textContent = 'Signing in...';
+            btn.disabled = true;
+            try {
+                const result = await api('/api/auth/login', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        username: document.getElementById('loginUsername').value,
+                        password: document.getElementById('loginPassword').value
+                    })
+                });
+                if (result && result.code === 0 && result.data) {
+                    token = result.data.accessToken;
+                    localStorage.setItem('smartnotes_token', token);
+                    await checkAdminAccess();
+                } else {
+                    showAlert(result?.message || 'Login failed. Please check your credentials.', 'error');
+                }
+            } catch (err) {
+                showAlert('Network error. Please try again.', 'error');
+            } finally {
+                btn.textContent = 'Sign In';
+                btn.disabled = false;
+            }
+        }
+
+        async function handleRegister(e) {
+            e.preventDefault();
+            hideAlert();
+            const btn = document.getElementById('registerBtn');
+            btn.textContent = 'Creating account...';
+            btn.disabled = true;
+            try {
+                const body = {
+                    username: document.getElementById('regUsername').value,
+                    password: document.getElementById('regPassword').value
+                };
+                const email = document.getElementById('regEmail').value.trim();
+                if (email) body.email = email;
+
+                const result = await api('/api/auth/register', {
+                    method: 'POST',
+                    body: JSON.stringify(body)
+                });
+                if (result && result.code === 0 && result.data) {
+                    token = result.data.accessToken;
+                    localStorage.setItem('smartnotes_token', token);
+                    await checkAdminAccess();
+                } else {
+                    showAlert(result?.message || 'Registration failed. Please try again.', 'error');
+                }
+            } catch (err) {
+                showAlert('Network error. Please try again.', 'error');
+            } finally {
+                btn.textContent = 'Create Account';
+                btn.disabled = false;
+            }
+        }
+
+        async function checkAdminAccess() {
+            try {
+                const result = await api('/api/auth/me');
+                if (result && result.code === 0 && result.data) {
+                    currentUser = result.data;
+                    if (currentUser.role === 'ADMIN') {
+                        showApp();
+                    } else {
+                        showAccessDenied();
+                    }
+                } else {
+                    showAuthScreen();
+                }
+            } catch (err) {
+                showAuthScreen();
+            }
+        }
+
+        function handleLogout() {
+            clearAuth();
+            showAuthScreen();
+        }
+
+        function clearAuth() {
+            token = null;
+            currentUser = null;
+            localStorage.removeItem('smartnotes_token');
+        }
+
+        function showAuthScreen() {
+            document.getElementById('authScreen').style.display = 'flex';
+            document.getElementById('accessDenied').style.display = 'none';
+            document.getElementById('app').classList.remove('active');
+            hideAlert();
+            document.getElementById('loginForm').reset();
+            document.getElementById('registerForm').reset();
+        }
+
+        function showAccessDenied() {
+            document.getElementById('authScreen').style.display = 'none';
+            document.getElementById('accessDenied').style.display = 'flex';
+            document.getElementById('app').classList.remove('active');
+        }
+
+        function showApp() {
+            document.getElementById('authScreen').style.display = 'none';
+            document.getElementById('accessDenied').style.display = 'none';
+            document.getElementById('app').classList.add('active');
+            document.getElementById('displayUsername').textContent = currentUser.username;
+            navigateTo('dashboard');
+        }
+
+        // ===== Navigation =====
+        function navigateTo(page) {
+            currentPage = page;
+            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(item => {
+                if (item.getAttribute('onclick').includes("'" + page + "'")) {
+                    item.classList.add('active');
+                }
+            });
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            const pageEl = document.getElementById('page-' + page);
+            if (pageEl) pageEl.classList.add('active');
+
+            const titles = {
+                dashboard: 'Admin Dashboard',
+                sync: 'System Status',
+                users: 'User Management',
+                notes: 'All Notes'
+            };
+            document.getElementById('pageTitle').textContent = titles[page] || 'Admin Dashboard';
+
+            if (page === 'dashboard') loadAdminDashboard();
+            else if (page === 'sync') loadSyncStatus();
+            else if (page === 'notes') loadNotes();
+        }
+
+        // ===== Admin Dashboard =====
+        async function loadAdminDashboard() {
+            try {
+                const [notesRes, docsRes] = await Promise.all([
+                    api('/api/notes?page=0&size=1'),
+                    api('/api/documents?page=0&size=1')
+                ]);
+
+                const noteCount = (notesRes?.data?.totalElements != null) ? notesRes.data.totalElements : (Array.isArray(notesRes?.data) ? notesRes.data.length : 0);
+                const docCount = (docsRes?.data?.totalElements != null) ? docsRes.data.totalElements : 0;
+
+                document.getElementById('statNotes').textContent = noteCount;
+                document.getElementById('statDocuments').textContent = docCount;
+                document.getElementById('statUsers').textContent = '-';
+                document.getElementById('statSync').textContent = 'Active';
+                document.getElementById('serverTime').textContent = new Date().toLocaleString();
+            } catch (err) {
+                console.error('Failed to load admin dashboard:', err);
+            }
+        }
+
+        // ===== Notes =====
+        async function loadNotes() {
+            const container = document.getElementById('notesListContainer');
+            container.innerHTML = '<div class="loading"><div class="spinner"></div> Loading notes...</div>';
+            try {
+                const result = await api('/api/notes?page=0&size=50');
+                if (result && result.code === 0 && result.data) {
+                    const notes = result.data.content || result.data;
+                    if (Array.isArray(notes) && notes.length > 0) {
+                        container.innerHTML = '<div class="notes-list">' +
+                            notes.map(note => renderNoteItem(note)).join('') +
+                            '</div>';
+                    } else {
+                        container.innerHTML = '<div class="empty-state"><div class="icon">&#128221;</div><p>No notes found.</p></div>';
+                    }
+                } else {
+                    container.innerHTML = '<div class="empty-state"><div class="icon">&#128221;</div><p>No notes found.</p></div>';
+                }
+            } catch (err) {
+                container.innerHTML = '<div class="empty-state"><div class="icon">&#128221;</div><p>Failed to load notes.</p></div>';
+            }
+        }
+
+        function renderNoteItem(note) {
+            const typeClass = 'badge-' + (note.type || 'normal').toLowerCase();
+            const date = note.createdAt ? new Date(note.createdAt).toLocaleDateString() : '';
+            return '<div class="note-item">' +
+                '<div class="note-info">' +
+                    '<div class="note-title">' + escapeHtml(note.title || 'Untitled') + '</div>' +
+                    '<div class="note-meta">' +
+                        '<span class="badge ' + typeClass + '">' + escapeHtml(note.type || 'NORMAL') + '</span>' +
+                        '<span>' + date + '</span>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="note-actions">' +
+                    '<button class="btn btn-danger btn-sm" onclick="deleteNote(' + note.id + ')">Delete</button>' +
+                '</div>' +
+            '</div>';
+        }
+
+        async function deleteNote(id) {
+            if (!confirm('Are you sure you want to delete this note?')) return;
+            try {
+                const result = await api('/api/notes/' + id, { method: 'DELETE' });
+                if (result && (result.code === 0 || result.code === 200)) {
+                    loadNotes();
+                } else {
+                    alert(result?.message || 'Failed to delete note.');
+                }
+            } catch (err) {
+                alert('Network error. Please try again.');
+            }
+        }
+
+        // ===== Sync Status =====
+        async function loadSyncStatus() {
+            const container = document.getElementById('syncInfoContainer');
+            container.innerHTML = '<div class="loading"><div class="spinner"></div> Loading sync status...</div>';
+            try {
+                const result = await api('/api/sync/status');
+                if (result && result.code === 0 && result.data) {
+                    const data = result.data;
+                    let html = '<div class="sync-info">';
+                    for (const [key, value] of Object.entries(data)) {
+                        const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
+                        const displayValue = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
+                        html += '<div class="sync-field">' +
+                            '<label>' + escapeHtml(label) + '</label>' +
+                            '<div class="value">' + escapeHtml(displayValue) + '</div>' +
+                        '</div>';
+                    }
+                    html += '</div>';
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = '<div class="empty-state"><div class="icon">&#128260;</div><p>No sync status available.</p></div>';
+                }
+            } catch (err) {
+                container.innerHTML = '<div class="empty-state"><div class="icon">&#128260;</div><p>Failed to load sync status.</p></div>';
+            }
+        }
+
+        // ===== Utilities =====
+        function escapeHtml(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // ===== Init =====
+        document.addEventListener('DOMContentLoaded', async function() {
+            if (token) {
+                await checkAdminAccess();
+            } else {
+                showAuthScreen();
+            }
+        });
+    </script>
+</body>
+</html>

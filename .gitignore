@@ -1,0 +1,30 @@
+# Java / Maven
+target/
+*.class
+*.jar
+*.war
+*.ear
+.settings/
+.project
+.classpath
+*.log
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment
+.env
+*.local
+
+# Build
+*.tmp
+*.bak

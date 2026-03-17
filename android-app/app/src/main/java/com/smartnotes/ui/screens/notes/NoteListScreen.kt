@@ -3,9 +3,11 @@ package com.smartnotes.ui.screens.notes
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Create
@@ -25,25 +28,24 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,7 +58,6 @@ import com.smartnotes.ui.components.ConfirmDialog
 import com.smartnotes.ui.components.EmptyState
 import com.smartnotes.ui.components.ErrorMessage
 import com.smartnotes.ui.components.LoadingIndicator
-import com.smartnotes.ui.components.NavigationBackButton
 import com.smartnotes.ui.components.NoteType
 import com.smartnotes.ui.components.NoteTypeBadge
 import com.smartnotes.ui.components.SmartNotesTopAppBar
@@ -80,15 +81,15 @@ fun NoteListScreen(
     val coroutineScope = rememberCoroutineScope()
 
     // Load more on scroll to bottom
-    val shouldLoadMore = remember {
+    val shouldLoadMore by remember {
         derivedStateOf {
             val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()
             lastVisibleItem != null && lastVisibleItem.index >= listState.layoutInfo.totalItemsCount - 3
         }
     }
 
-    LaunchedEffect(shouldLoadMore.value) {
-        if (shouldLoadMore.value) {
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore) {
             viewModel.loadMore()
         }
     }
@@ -119,106 +120,108 @@ fun NoteListScreen(
             }
         },
     ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues),
-        ) {
-            // Search bar
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { viewModel.updateSearchQuery(it) },
-                placeholder = { Text("Search notes...") },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = null,
-                    )
-                },
-                singleLine = true,
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    unfocusedBorderColor = Color.Transparent,
-                ),
-                shape = MaterialTheme.shapes.large,
-            )
-
-            // Filter tabs
-            val filters = NoteFilter.entries
-            ScrollableFilterTabs(
-                filters = filters,
-                activeFilter = activeFilter,
-                onFilterSelected = { viewModel.setFilter(it) },
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Content
-            when (notesState) {
-                is NotesUiState.Loading -> {
-                    LoadingIndicator(message = "Loading notes...")
-                }
-
-                is NotesUiState.Error -> {
-                    ErrorMessage(
-                        message = (notesState as NotesUiState.Error).message,
-                        onRetry = { viewModel.refreshNotes() },
-                    )
-                }
-
-                is NotesUiState.Success -> {
-                    val notes = (notesState as NotesUiState.Success).notes
-                    if (notes.isEmpty()) {
-                        EmptyState(
-                            message = if (searchQuery.isBlank()) {
-                                "No notes yet. Tap + to create one!"
-                            } else {
-                                "No notes match your search"
-                            },
-                            icon = Icons.Default.Create,
-                            actionLabel = if (searchQuery.isBlank()) "Create Note" else null,
-                            onAction = if (searchQuery.isBlank()) {
-                                { onNavigateToNoteEdit(null) }
-                            } else {
-                                null
-                            },
+                    .fillMaxSize()
+                    .padding(paddingValues),
+            ) {
+                // Search bar
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { viewModel.updateSearchQuery(it) },
+                    placeholder = { Text("Search notes...") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = null,
                         )
-                    } else {
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                                start = 16.dp,
-                                end = 16.dp,
-                                bottom = 80.dp,
-                            ),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            items(
-                                items = notes,
-                                key = { note -> note.clientId },
-                            ) { note ->
-                                NoteCard(
-                                    note = note,
-                                    onClick = { onNavigateToNoteEdit(note.id) },
-                                    onPinToggle = { viewModel.togglePin(note) },
-                                    onDelete = { viewModel.showDeleteConfirm(note.id) },
-                                )
-                            }
+                    },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        unfocusedBorderColor = Color.Transparent,
+                    ),
+                    shape = MaterialTheme.shapes.large,
+                )
 
-                            // Loading more indicator
-                            if ((notesState as NotesUiState.Success).hasMore) {
-                                item {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(16.dp),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                // Filter tabs
+                val filters = NoteFilter.entries
+                ScrollableFilterTabs(
+                    filters = filters,
+                    activeFilter = activeFilter,
+                    onFilterSelected = { viewModel.setFilter(it) },
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Content
+                when (notesState) {
+                    is NotesUiState.Loading -> {
+                        LoadingIndicator(message = "Loading notes...")
+                    }
+
+                    is NotesUiState.Error -> {
+                        ErrorMessage(
+                            message = (notesState as NotesUiState.Error).message,
+                            onRetry = { viewModel.refreshNotes() },
+                        )
+                    }
+
+                    is NotesUiState.Success -> {
+                        val notes = (notesState as NotesUiState.Success).notes
+                        if (notes.isEmpty()) {
+                            EmptyState(
+                                message = if (searchQuery.isBlank()) {
+                                    "No notes yet. Tap + to create one!"
+                                } else {
+                                    "No notes match your search"
+                                },
+                                icon = Icons.Default.Create,
+                                actionLabel = if (searchQuery.isBlank()) "Create Note" else null,
+                                onAction = if (searchQuery.isBlank()) {
+                                    { onNavigateToNoteEdit(null) }
+                                } else {
+                                    null
+                                },
+                            )
+                        } else {
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(
+                                    start = 16.dp,
+                                    end = 16.dp,
+                                    bottom = 80.dp,
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                items(
+                                    items = notes,
+                                    key = { note -> note.clientId },
+                                ) { note ->
+                                    NoteCard(
+                                        note = note,
+                                        onClick = { onNavigateToNoteEdit(note.id) },
+                                        onPinToggle = { viewModel.togglePin(note) },
+                                        onDelete = { viewModel.showDeleteConfirm(note.id) },
+                                    )
+                                }
+
+                                // Loading more indicator
+                                if ((notesState as NotesUiState.Success).hasMore) {
+                                    item {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(16.dp),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                        }
                                     }
                                 }
                             }
@@ -226,28 +229,27 @@ fun NoteListScreen(
                     }
                 }
             }
-        }
 
-        // Pull-to-refresh indicator
-        if (isRefreshing) {
-            LinearProgressIndicator(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(paddingValues)
-                    .align(Alignment.TopCenter),
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
+            // Pull-to-refresh indicator
+            if (isRefreshing) {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.TopCenter),
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
 
-        // Delete confirmation dialog
-        if (deleteConfirmNoteId != null) {
-            ConfirmDialog(
-                title = "Delete Note",
-                message = "Are you sure you want to delete this note? This action cannot be undone.",
-                onConfirm = { viewModel.deleteNote(deleteConfirmNoteId!!) },
-                onDismiss = { viewModel.dismissDeleteConfirm() },
-                confirmButtonText = "Delete",
-            )
+            // Delete confirmation dialog
+            if (deleteConfirmNoteId != null) {
+                ConfirmDialog(
+                    title = "Delete Note",
+                    message = "Are you sure you want to delete this note? This action cannot be undone.",
+                    onConfirm = { viewModel.deleteNote(deleteConfirmNoteId!!) },
+                    onDismiss = { viewModel.dismissDeleteConfirm() },
+                    confirmButtonText = "Delete",
+                )
+            }
         }
     }
 }
@@ -258,10 +260,10 @@ private fun ScrollableFilterTabs(
     activeFilter: NoteFilter,
     onFilterSelected: (NoteFilter) -> Unit,
 ) {
-    androidx.compose.foundation.horizontalScroll
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
             .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -414,26 +416,11 @@ private fun NoteCard(
 
 private fun formatNoteDate(dateTime: java.time.LocalDateTime): String {
     val now = java.time.LocalDateTime.now()
-    val formatter = java.time.format.DateTimeFormatter.ofPattern("MMM dd, HH:mm")
     return if (dateTime.toLocalDate() == now.toLocalDate()) {
         "Today, ${dateTime.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))}"
     } else if (dateTime.toLocalDate() == now.minusDays(1).toLocalDate()) {
         "Yesterday, ${dateTime.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))}"
     } else {
-        dateTime.format(formatter)
+        dateTime.format(java.time.format.DateTimeFormatter.ofPattern("MMM dd, HH:mm"))
     }
-}
-
-@Composable
-private fun LinearProgressIndicator(
-    modifier: Modifier = Modifier,
-    color: Color = MaterialTheme.colorScheme.primary,
-    trackColor: Color = MaterialTheme.colorScheme.surfaceVariant,
-    progress: () -> Float = { 1f },
-) {
-    androidx.compose.material3.LinearProgressIndicator(
-        modifier = modifier,
-        color = color,
-        trackColor = trackColor,
-    )
 }

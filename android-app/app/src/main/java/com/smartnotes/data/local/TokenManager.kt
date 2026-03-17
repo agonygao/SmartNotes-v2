@@ -56,6 +56,10 @@ class TokenManager @Inject constructor(
             .apply()
     }
 
+    fun getRefreshTokenSync(): String? {
+        return prefs.getString(KEY_REFRESH_TOKEN, null)
+    }
+
     fun isTokenAvailable(): Boolean {
         return !getAccessTokenSync().isNullOrBlank()
     }

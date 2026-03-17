@@ -240,7 +240,7 @@ CREATE TABLE IF NOT EXISTS sync_logs (
 CREATE TABLE IF NOT EXISTS sync_cursors (
     id              BIGINT          AUTO_INCREMENT  PRIMARY KEY,
     user_id         BIGINT          NOT NULL,
-    cursor          BIGINT          NOT NULL DEFAULT 0,
+    `cursor`        BIGINT          NOT NULL DEFAULT 0,
     last_synced_at  DATETIME        DEFAULT NULL,
     updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 

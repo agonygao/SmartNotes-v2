@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">SmartNotes</string>
+    <string name="nav_notes">Notes</string>
+    <string name="nav_vocabulary">Vocabulary</string>
+    <string name="nav_documents">Documents</string>
+    <string name="nav_settings">Settings</string>
+</resources>

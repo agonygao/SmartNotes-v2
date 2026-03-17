@@ -4,9 +4,14 @@ import com.smartnotes.dto.LoginRequest;
 import com.smartnotes.dto.LoginResponse;
 import com.smartnotes.dto.RegisterRequest;
 import com.smartnotes.dto.UserDTO;
+import com.smartnotes.entity.Note;
 import com.smartnotes.entity.User;
+import com.smartnotes.entity.Word;
 import com.smartnotes.exception.BusinessException;
+import com.smartnotes.repository.NoteRepository;
 import com.smartnotes.repository.UserRepository;
+import com.smartnotes.repository.WordBookRepository;
+import com.smartnotes.repository.WordRepository;
 import com.smartnotes.security.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -24,6 +30,9 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final NoteRepository noteRepository;
+    private final WordBookRepository wordBookRepository;
+    private final WordRepository wordRepository;
 
     @Transactional
     public UserDTO register(RegisterRequest request) {
@@ -45,6 +54,62 @@ public class AuthService {
         log.info("User registered successfully: {}", user.getUsername());
 
         return toUserDTO(user);
+    }
+
+    /**
+     * Register a new user and migrate guest data from a temporary guest user account.
+     *
+     * @param request    the registration request
+     * @param guestUserId the ID of the guest user whose data should be migrated
+     * @return the registered user DTO
+     */
+    @Transactional
+    public UserDTO registerFromGuest(RegisterRequest request, Long guestUserId) {
+        UserDTO registeredUser = register(request);
+        migrateGuestData(guestUserId, registeredUser.getId());
+        return registeredUser;
+    }
+
+    /**
+     * Migrate all non-deleted notes and word progress records from a guest user
+     * to a target user account.
+     *
+     * @param guestUserId  the guest user's ID
+     * @param targetUserId the target (registered) user's ID
+     */
+    @Transactional
+    public void migrateGuestData(Long guestUserId, Long targetUserId) {
+        if (guestUserId == null || targetUserId == null) {
+            log.warn("Skipping guest data migration: guestUserId or targetUserId is null");
+            return;
+        }
+
+        if (guestUserId.equals(targetUserId)) {
+            log.warn("Skipping guest data migration: guestUserId and targetUserId are the same");
+            return;
+        }
+
+        // Migrate notes
+        List<Note> guestNotes = noteRepository.findByUserIdAndDeletedFalse(guestUserId,
+                org.springframework.data.domain.PageRequest.of(0, Integer.MAX_VALUE)).getContent();
+        int noteCount = 0;
+        for (Note note : guestNotes) {
+            note.setUserId(targetUserId);
+            noteRepository.save(note);
+            noteCount++;
+        }
+
+        // Migrate word books
+        List<com.smartnotes.entity.WordBook> guestWordBooks = wordBookRepository.findByUserIdAndDeletedFalse(guestUserId);
+        int wordBookCount = 0;
+        for (com.smartnotes.entity.WordBook wordBook : guestWordBooks) {
+            wordBook.setUserId(targetUserId);
+            wordBookRepository.save(wordBook);
+            wordBookCount++;
+        }
+
+        log.info("Guest data migration completed: guestUserId={}, targetUserId={}, notes={}, wordBooks={}",
+                guestUserId, targetUserId, noteCount, wordBookCount);
     }
 
     @Transactional(readOnly = true)

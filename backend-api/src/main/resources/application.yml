@@ -10,7 +10,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     show-sql: false
     open-in-view: false
     properties:
@@ -27,6 +27,8 @@ app:
     secret: Y2ZhN2U4ZjFkNmI0YjU4ZjI2YTc0ZWMwMzZlNmJkNTI3MmM4ZjE4Y2Q5YTc2ZTNlOWU0MzI2Njg3ZDk0MWY0NWE3ZTIyNjg1YTc0ZjQ0YTNhNjI0ZWRiYTc4NjJmZWMxYTQzNmQ1ZjZlNmU3NDZlNjI2ZjRkNTM2NTY0ZTc0NjU3MzZlNmQ2NTczNjQ2NTcy
     access-token-expiration: 86400000
     refresh-token-expiration: 604800000
+  encryption:
+    key: YWVzLTI1Ni1nY20tZW5jcnlwdGlvbi1rZXktMzJieXRlcw==  # base64-encoded 32-byte key
 
 file:
   upload-dir: ./uploads

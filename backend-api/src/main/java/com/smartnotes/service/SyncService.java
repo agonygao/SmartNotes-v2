@@ -6,6 +6,7 @@ import com.smartnotes.dto.SyncPullResponse;
 import com.smartnotes.dto.SyncPushRequest;
 import com.smartnotes.dto.SyncPushResponse;
 import com.smartnotes.entity.*;
+import com.smartnotes.exception.BusinessException;
 import com.smartnotes.repository.*;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.TypedQuery;
@@ -386,6 +387,137 @@ public class SyncService {
                 .serverData(conflict.getServerData())
                 .createdAt(conflict.getCreatedAt())
                 .build();
+    }
+
+    /**
+     * Resolve a sync conflict by choosing either local or server data.
+     *
+     * @param userId      the user ID
+     * @param conflictId  the conflict log ID
+     * @param resolution  "LOCAL_WINS" or "SERVER_WINS"
+     * @param resolvedData optional resolved data (JSON) - used when a custom merge is provided
+     * @return the resolved conflict entry
+     */
+    public SyncConflictResponse.ConflictEntry resolveConflict(Long userId, Long conflictId,
+                                                               String resolution, String resolvedData) {
+        ConflictLog conflict = conflictLogRepository.findByIdAndUserId(conflictId, userId)
+                .orElseThrow(() -> new BusinessException(
+                        com.smartnotes.dto.ErrorCode.NOT_FOUND, "Conflict not found with id: " + conflictId
+                ));
+
+        if (Boolean.TRUE.equals(conflict.getResolved())) {
+            throw new BusinessException(
+                    com.smartnotes.dto.ErrorCode.BAD_REQUEST, "Conflict already resolved"
+            );
+        }
+
+        String resolvedAction;
+        switch (resolution.toUpperCase()) {
+            case "LOCAL_WINS" -> {
+                // Apply local data to the entity if the entity still exists
+                String dataToApply = (resolvedData != null && !resolvedData.isBlank())
+                        ? resolvedData : conflict.getLocalData();
+                applyDataToEntity(conflict.getEntityType(), conflict.getEntityId(), dataToApply);
+                resolvedAction = "LOCAL_WINS";
+            }
+            case "SERVER_WINS" -> {
+                // Just mark the conflict as resolved, keep server data as-is
+                resolvedAction = "SERVER_WINS";
+            }
+            default -> throw new BusinessException(
+                    com.smartnotes.dto.ErrorCode.BAD_REQUEST,
+                    "Invalid resolution: " + resolution + ". Must be LOCAL_WINS or SERVER_WINS"
+            );
+        }
+
+        conflict.setResolved(true);
+        conflictLogRepository.save(conflict);
+
+        log.info("Conflict resolved: conflictId={}, entityType={}, entityId={}, resolution={}",
+                conflictId, conflict.getEntityType(), conflict.getEntityId(), resolvedAction);
+
+        return toConflictEntry(conflict);
+    }
+
+    /**
+     * Apply resolved data to the entity by deserializing JSON and updating fields.
+     */
+    private void applyDataToEntity(String entityType, Long entityId, String jsonData) {
+        if (jsonData == null || jsonData.isBlank()) {
+            log.warn("No data to apply for entity type={}, id={}", entityType, entityId);
+            return;
+        }
+
+        Optional<? extends BaseEntity> entityOpt = findEntityById(entityType, entityId);
+        if (entityOpt.isEmpty()) {
+            log.warn("Entity not found for data application: type={}, id={}", entityType, entityId);
+            return;
+        }
+
+        try {
+            BaseEntity entity = entityOpt.get();
+            @SuppressWarnings("unchecked")
+            var updates = objectMapper.readValue(jsonData, java.util.Map.class);
+
+            // Update common BaseEntity fields if present
+            if (updates.containsKey("clientId")) {
+                entity.setClientId((String) updates.get("clientId"));
+            }
+
+            // Apply entity-specific updates using reflection or type-specific handling
+            switch (entityType) {
+                case "NOTE" -> applyNoteUpdates((Note) entity, updates);
+                case "WORD_BOOK" -> applyWordBookUpdates((WordBook) entity, updates);
+                case "WORD" -> applyWordUpdates((Word) entity, updates);
+                case "DOCUMENT" -> applyDocumentUpdates((Document) entity, updates);
+            }
+
+            entity.setVersion(entity.getVersion() != null ? entity.getVersion() + 1 : 1);
+            saveEntity(entityType, entity);
+            log.info("Applied data to entity: type={}, id={}", entityType, entityId);
+        } catch (Exception e) {
+            log.error("Failed to apply data to entity: type={}, id={}, error={}",
+                    entityType, entityId, e.getMessage(), e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void applyNoteUpdates(Note note, java.util.Map<String, Object> updates) {
+        if (updates.containsKey("title")) note.setTitle((String) updates.get("title"));
+        if (updates.containsKey("content")) note.setContent((String) updates.get("content"));
+        if (updates.containsKey("type") && updates.get("type") != null) {
+            try {
+                note.setType(NoteType.valueOf((String) updates.get("type")));
+            } catch (Exception ignored) {
+            }
+        }
+        if (updates.containsKey("checklistItems")) note.setChecklistItems((String) updates.get("checklistItems"));
+        if (updates.containsKey("isPinned") && updates.get("isPinned") != null)
+            note.setIsPinned((Boolean) updates.get("isPinned"));
+        if (updates.containsKey("isCompleted") && updates.get("isCompleted") != null)
+            note.setIsCompleted((Boolean) updates.get("isCompleted"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private void applyWordBookUpdates(WordBook wordBook, java.util.Map<String, Object> updates) {
+        if (updates.containsKey("name")) wordBook.setName((String) updates.get("name"));
+        if (updates.containsKey("description")) wordBook.setDescription((String) updates.get("description"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private void applyWordUpdates(Word word, java.util.Map<String, Object> updates) {
+        if (updates.containsKey("word")) word.setWord((String) updates.get("word"));
+        if (updates.containsKey("meaning")) word.setMeaning((String) updates.get("meaning"));
+        if (updates.containsKey("phonetic")) word.setPhonetic((String) updates.get("phonetic"));
+        if (updates.containsKey("exampleSentence")) word.setExampleSentence((String) updates.get("exampleSentence"));
+        if (updates.containsKey("sortOrder") && updates.get("sortOrder") != null)
+            word.setSortOrder(((Number) updates.get("sortOrder")).intValue());
+    }
+
+    @SuppressWarnings("unchecked")
+    private void applyDocumentUpdates(Document document, java.util.Map<String, Object> updates) {
+        if (updates.containsKey("filename")) document.setFilename((String) updates.get("filename"));
+        if (updates.containsKey("originalFilename")) document.setOriginalFilename((String) updates.get("originalFilename"));
     }
 
     // ==================== Helper Methods ====================

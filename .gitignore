@@ -24,7 +24,28 @@ desktop.ini
 # Environment
 .env
 *.local
+application-local.yml
 
 # Build
 *.tmp
 *.bak
+
+# Android build
+android-app/.gradle/
+android-app/app/build/
+android-app/build/
+
+# Backend uploads
+backend-api/data/
+backend-api/uploads/
+
+# Agent tools (not part of source)
+logs/
+.claude/
+CLAUDE.md
+claude-agents.json
+agents-inline.json
+run-agents.bat
+run-claude-test.bat
+run-phase3-4.bat
+setup-agents.ps1

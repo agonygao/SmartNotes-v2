@@ -1,5 +1,7 @@
 package com.smartnotes.ui.screens.documents
 
+import com.smartnotes.R
+
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -31,20 +33,31 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.smartnotes.ui.components.FileTypeIcon
+import java.io.File
 import com.smartnotes.ui.components.NavigationBackButton
 import com.smartnotes.ui.viewmodel.DocumentUploadUiState
 import com.smartnotes.ui.viewmodel.DocumentViewModel
+
+private const val MAX_FILE_SIZE_BYTES = 50L * 1024L * 1024L // 50 MB
+
+private val ALLOWED_EXTENSIONS = setOf(
+    "pdf", "doc", "docx", "txt", "md", "xls", "xlsx",
+    "jpg", "jpeg", "png", "gif", "bmp", "webp"
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,25 +66,49 @@ fun DocumentUploadScreen(
     onUploadSuccess: () -> Unit,
     viewModel: DocumentViewModel = hiltViewModel(),
 ) {
-    val uploadState by viewModel.uploadState
+    val uploadState = viewModel.uploadState.collectAsState().value
 
     var selectedFileName by remember { mutableStateOf<String?>(null) }
     var selectedFileUri by remember { mutableStateOf<android.net.Uri?>(null) }
     var selectedFileSize by remember { mutableStateOf<Long>(0L) }
     var selectedMimeType by remember { mutableStateOf("") }
+    var validationError by remember { mutableStateOf<String?>(null) }
 
     // File picker launcher
+    val context = LocalContext.current
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri: android.net.Uri? ->
         if (uri != null) {
-            selectedFileUri = uri
-            // Extract filename from URI
+            validationError = null
             val fileName = uri.lastPathSegment ?: "Unknown file"
+            val extension = fileName.substringAfterLast('.', "").lowercase()
+
+            // Validate file extension
+            if (extension.isEmpty() || extension !in ALLOWED_EXTENSIONS) {
+                validationError = context.getString(R.string.file_type_not_allowed, extension.uppercase())
+                return@rememberLauncherForActivityResult
+            }
+
+            selectedFileUri = uri
             selectedFileName = fileName
-            // Estimate file size from content resolver (in a real app, query ContentResolver)
-            selectedFileSize = 0L // Will be resolved by the upload mechanism
             selectedMimeType = getMimeTypeFromUri(uri) ?: "application/octet-stream"
+
+            // Read file size from ContentResolver
+            try {
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                    if (cursor.moveToFirst() && sizeIndex >= 0) {
+                        val size = cursor.getLong(sizeIndex)
+                        selectedFileSize = size
+                        if (size > MAX_FILE_SIZE_BYTES) {
+                            validationError = context.getString(R.string.file_too_large)
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                selectedFileSize = 0L
+            }
         }
     }
 
@@ -92,7 +129,7 @@ fun DocumentUploadScreen(
             androidx.compose.material3.TopAppBar(
                 title = {
                     Text(
-                        text = "Upload Document",
+                        text = stringResource(R.string.upload_document),
                         style = MaterialTheme.typography.titleLarge,
                     )
                 },
@@ -126,7 +163,7 @@ fun DocumentUploadScreen(
                             tint = androidx.compose.ui.graphics.Color(0xFF4CAF50),
                         )
                         Text(
-                            text = "Upload Successful!",
+                            text = stringResource(R.string.upload_success),
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
                             color = androidx.compose.ui.graphics.Color(0xFF4CAF50),
@@ -136,7 +173,7 @@ fun DocumentUploadScreen(
                             onClick = onUploadSuccess,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("View Documents")
+                            Text(stringResource(R.string.view_documents))
                         }
                     }
                 }
@@ -154,7 +191,7 @@ fun DocumentUploadScreen(
                             tint = MaterialTheme.colorScheme.error,
                         )
                         Text(
-                            text = "Upload Failed",
+                            text = stringResource(R.string.upload_failed),
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.error,
@@ -170,7 +207,7 @@ fun DocumentUploadScreen(
                             onClick = { viewModel.resetUploadState() },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("Try Again")
+                            Text(stringResource(R.string.try_again))
                         }
                     }
                 }
@@ -301,6 +338,18 @@ fun DocumentUploadScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
+                        // Validation error
+                        if (validationError != null) {
+                            Text(
+                                text = validationError!!,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+
                         // Upload button
                         Button(
                             onClick = {
@@ -313,7 +362,8 @@ fun DocumentUploadScreen(
                                 }
                             },
                             enabled = uploadState !is DocumentUploadUiState.Uploading
-                                    && uploadState !is DocumentUploadUiState.Progress,
+                                    && uploadState !is DocumentUploadUiState.Progress
+                                    && validationError == null,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(48.dp),
@@ -328,7 +378,7 @@ fun DocumentUploadScreen(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                             }
-                            Text("Upload")
+                            Text(stringResource(R.string.upload))
                         }
                     }
                 }

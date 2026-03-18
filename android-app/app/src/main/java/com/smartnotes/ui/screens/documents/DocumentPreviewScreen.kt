@@ -1,5 +1,7 @@
 package com.smartnotes.ui.screens.documents
 
+import com.smartnotes.R
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -33,11 +35,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -56,8 +61,8 @@ fun DocumentPreviewScreen(
     onNavigateBack: () -> Unit,
     viewModel: DocumentViewModel = hiltViewModel(),
 ) {
-    val previewState by viewModel.previewState
-    val deleteConfirmDocId by viewModel.deleteConfirmDocId
+    val previewState = viewModel.previewState.collectAsState().value
+    val deleteConfirmDocId = viewModel.deleteConfirmDocId.collectAsState().value
 
     // Load document preview
     LaunchedEffect(docId) {
@@ -69,7 +74,7 @@ fun DocumentPreviewScreen(
             androidx.compose.material3.TopAppBar(
                 title = {
                     Text(
-                        text = "Document Preview",
+                        text = stringResource(R.string.document_preview),
                         style = MaterialTheme.typography.titleLarge,
                         maxLines = 1,
                     )
@@ -217,7 +222,7 @@ fun DocumentPreviewScreen(
                                 .padding(16.dp),
                         ) {
                             Text(
-                                text = "Preview",
+                                text = stringResource(R.string.preview),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -307,7 +312,7 @@ fun DocumentPreviewScreen(
                                 modifier = Modifier.size(20.dp),
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Download")
+                            Text(stringResource(R.string.download))
                         }
 
                         // Delete button
@@ -326,7 +331,7 @@ fun DocumentPreviewScreen(
                                 modifier = Modifier.size(20.dp),
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Delete")
+                            Text(stringResource(R.string.delete))
                         }
                     }
 
@@ -338,7 +343,7 @@ fun DocumentPreviewScreen(
         // Delete confirmation dialog
         if (deleteConfirmDocId != null) {
             ConfirmDialog(
-                title = "Delete Document",
+                title = stringResource(R.string.delete_document),
                 message = "Are you sure you want to delete this document? This action cannot be undone.",
                 onConfirm = {
                     viewModel.deleteDocument(deleteConfirmDocId!!)
@@ -346,17 +351,11 @@ fun DocumentPreviewScreen(
                     onNavigateBack()
                 },
                 onDismiss = { viewModel.dismissDeleteConfirm() },
-                confirmButtonText = "Delete",
+                confirmButtonText = stringResource(R.string.delete),
             )
         }
     }
 }
-
-@Composable
-private fun Modifier.heightIn(min: androidx.compose.ui.unit.Dp) =
-    this.then(
-        androidx.compose.foundation.layout.heightIn(min = min)
-    )
 
 private fun formatFileSize(bytes: Long): String {
     return when {

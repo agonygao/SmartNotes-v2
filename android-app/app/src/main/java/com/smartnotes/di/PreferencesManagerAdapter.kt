@@ -1,14 +1,18 @@
 package com.smartnotes.di
 
+import android.content.Context
+import com.smartnotes.core.LocaleHelper
 import com.smartnotes.data.preference.UserPreferences
 import com.smartnotes.ui.viewmodel.PreferencesManager
 import com.smartnotes.ui.viewmodel.ThemeMode
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class PreferencesManagerAdapter @Inject constructor(
-    private val userPreferences: UserPreferences
+    private val userPreferences: UserPreferences,
+    @ApplicationContext private val context: Context
 ) : PreferencesManager {
 
     override fun getBackendUrl(): String {
@@ -56,6 +60,16 @@ class PreferencesManagerAdapter @Inject constructor(
 
     override fun saveLastSyncTime(time: String?) {
         // No-op: not stored in UserPreferences currently
+    }
+
+    override fun getLanguage(): String {
+        val prefs = context.getSharedPreferences("smartnotes_prefs", Context.MODE_PRIVATE)
+        return prefs.getString("locale", LocaleHelper.ENGLISH) ?: LocaleHelper.ENGLISH
+    }
+
+    override fun saveLanguage(language: String) {
+        context.getSharedPreferences("smartnotes_prefs", Context.MODE_PRIVATE)
+            .edit().putString("locale", language).apply()
     }
 
     override fun clearAll() {

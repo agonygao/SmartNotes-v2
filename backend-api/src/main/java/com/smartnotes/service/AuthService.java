@@ -112,7 +112,7 @@ public class AuthService {
                 guestUserId, targetUserId, noteCount, wordBookCount);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public LoginResponse login(LoginRequest request) {
         User user = userRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new BusinessException(
@@ -127,8 +127,8 @@ public class AuthService {
             throw new BusinessException(com.smartnotes.dto.ErrorCode.ACCOUNT_DISABLED);
         }
 
-        String accessToken = jwtUtil.generateAccessToken(user);
-        String refreshToken = jwtUtil.generateRefreshToken(user);
+        String accessToken = jwtUtil.generateAccessToken(user, user.getTokenVersion());
+        String refreshToken = jwtUtil.generateRefreshToken(user, user.getTokenVersion());
 
         log.info("User logged in successfully: {}", user.getUsername());
 
@@ -140,7 +140,7 @@ public class AuthService {
                 .build();
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public LoginResponse refreshToken(String refreshToken) {
         if (!jwtUtil.validateToken(refreshToken)) {
             throw new BusinessException(com.smartnotes.dto.ErrorCode.TOKEN_INVALID);
@@ -154,8 +154,17 @@ public class AuthService {
             throw new BusinessException(com.smartnotes.dto.ErrorCode.ACCOUNT_DISABLED);
         }
 
-        String newAccessToken = jwtUtil.generateAccessToken(user);
-        String newRefreshToken = jwtUtil.generateRefreshToken(user);
+        // Invalidate old refresh token by incrementing tokenVersion
+        int tokenVersion = jwtUtil.extractTokenVersion(refreshToken);
+        if (user.getTokenVersion() != tokenVersion) {
+            throw new BusinessException(com.smartnotes.dto.ErrorCode.TOKEN_INVALID, "Refresh token has been revoked");
+        }
+
+        user.setTokenVersion(user.getTokenVersion() + 1);
+        userRepository.save(user);
+
+        String newAccessToken = jwtUtil.generateAccessToken(user, user.getTokenVersion());
+        String newRefreshToken = jwtUtil.generateRefreshToken(user, user.getTokenVersion());
 
         log.info("Token refreshed for user: {}", user.getUsername());
 
@@ -165,6 +174,25 @@ public class AuthService {
                 .tokenType("Bearer")
                 .expiresIn(86400000L)
                 .build();
+    }
+
+    /**
+     * Change user password and invalidate all existing tokens by incrementing tokenVersion.
+     */
+    @Transactional
+    public void changePassword(Long userId, String oldPassword, String newPassword) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(com.smartnotes.dto.ErrorCode.NOT_FOUND));
+
+        if (!passwordEncoder.matches(oldPassword, user.getPasswordHash())) {
+            throw new BusinessException(com.smartnotes.dto.ErrorCode.INVALID_CREDENTIALS);
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setTokenVersion(user.getTokenVersion() + 1);
+        userRepository.save(user);
+
+        log.info("Password changed for user: {}", user.getUsername());
     }
 
     @Transactional(readOnly = true)

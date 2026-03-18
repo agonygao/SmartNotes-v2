@@ -1,8 +1,11 @@
 package com.smartnotes.ui.navigation
 
-import androidx.navigation.NavController
+import androidx.compose.runtime.Composable
+import androidx.navigation.NavHostController
 import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.smartnotes.ui.screens.auth.LoginScreen
 import com.smartnotes.ui.screens.auth.RegisterScreen
@@ -18,8 +21,8 @@ import com.smartnotes.ui.screens.documents.DocumentUploadScreen
 import com.smartnotes.ui.screens.settings.SettingsScreen
 
 @Composable
-fun NavGraph(navController: NavController) {
-    androidx.navigation.compose.NavHost(
+fun NavGraph(navController: NavHostController) {
+    NavHost(
         navController = navController,
         startDestination = Screen.Notes.route
     ) {

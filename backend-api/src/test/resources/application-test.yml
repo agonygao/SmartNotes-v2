@@ -22,7 +22,7 @@ app:
     access-token-expiration: 86400000
     refresh-token-expiration: 604800000
   encryption:
-    key: YWVzLTI1Ni1nY20tZW5jcnlwdGlvbi1rZXktMzJieXRlcw==
+    key: YWFiYmNjZGRlZWZmMDAxMTIyMzM0NDU1NjY3Nzg4OTk=
 
 file:
   upload-dir: ./test-uploads

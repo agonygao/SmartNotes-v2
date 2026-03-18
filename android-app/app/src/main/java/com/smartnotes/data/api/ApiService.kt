@@ -52,7 +52,10 @@ interface ApiService {
     // ==================== Word Books ====================
 
     @GET("api/wordbooks")
-    suspend fun getWordBooks(): ApiResponse<List<WordBookResponse>>
+    suspend fun getWordBooks(
+        @Query("page") page: Int = 0,
+        @Query("size") size: Int = 20
+    ): ApiResponse<PageResponse<WordBookResponse>>
 
     @GET("api/wordbooks/defaults")
     suspend fun getDefaultWordBooks(): ApiResponse<List<WordBookResponse>>
@@ -159,7 +162,7 @@ interface ApiService {
     suspend fun submitReviewResult(@Body request: WordReviewResultRequest): ApiResponse<Void>
 
     @GET("api/review/wrong-words")
-    suspend fun getWrongWords(): ApiResponse<List<WordReviewResponse.WordReviewItem>>
+    suspend fun getWrongWords(): ApiResponse<List<WordReviewItem>>
 
     @GET("api/review/dictation/stats")
     suspend fun getDictationStats(): ApiResponse<Map<String, Any>>

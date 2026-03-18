@@ -1,5 +1,7 @@
 package com.smartnotes.ui.screens.vocabulary
 
+import com.smartnotes.R
+
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -40,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -68,10 +72,10 @@ fun WordBookDetailScreen(
     onNavigateToDictation: (bookId: Long) -> Unit,
     viewModel: WordBookViewModel = hiltViewModel(),
 ) {
-    val currentWordBook by viewModel.currentWordBook
-    val wordsState by viewModel.wordsState
-    val isOperationLoading by viewModel.isOperationLoading
-    val operationError by viewModel.operationError
+    val currentWordBook = viewModel.currentWordBook.collectAsState().value
+    val wordsState = viewModel.wordsState.collectAsState().value
+    val isOperationLoading = viewModel.isOperationLoading.collectAsState().value
+    val operationError = viewModel.operationError.collectAsState().value
     val snackbarHostState = remember { SnackbarHostState() }
     var showAddWordDialog by remember { mutableStateOf(false) }
     var expandedWordId by remember { mutableStateOf<Long?>(null) }
@@ -89,7 +93,7 @@ fun WordBookDetailScreen(
     // Show operation errors
     LaunchedEffect(operationError) {
         if (operationError != null) {
-            snackbarHostState.showSnackbar(operationError!!)
+            snackbarHostState.showSnackbar(message = operationError!!)
             viewModel.clearOperationError()
         }
     }
@@ -97,7 +101,7 @@ fun WordBookDetailScreen(
     Scaffold(
         topBar = {
             SmartNotesTopAppBar(
-                title = currentWordBook?.name ?: "Word Book",
+                title = currentWordBook?.name ?: stringResource(R.string.word_book),
                 navigationIcon = { NavigationBackButton(onBackClick = onNavigateBack) },
                 actions = {
                     // Review button
@@ -187,13 +191,13 @@ fun WordBookDetailScreen(
                                     modifier = Modifier.size(18.dp),
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Review")
+                                Text(stringResource(R.string.review))
                             }
                             OutlinedButton(
                                 onClick = { onNavigateToDictation(bookId) },
                                 modifier = Modifier.weight(1f),
                             ) {
-                                Text("Dictation")
+                                Text(stringResource(R.string.dictation))
                             }
                         }
                     }
@@ -203,7 +207,7 @@ fun WordBookDetailScreen(
             // Words list
             when (wordsState) {
                 is WordsUiState.Loading -> {
-                    LoadingIndicator(message = "Loading words...")
+                    LoadingIndicator(message = stringResource(R.string.loading_words))
                 }
 
                 is WordsUiState.Error -> {
@@ -217,9 +221,9 @@ fun WordBookDetailScreen(
                     val words = (wordsState as WordsUiState.Success).words
                     if (words.isEmpty()) {
                         EmptyState(
-                            message = "No words in this book yet. Tap + to add some!",
+                            message = stringResource(R.string.no_words),
                             icon = Icons.Default.Book,
-                            actionLabel = "Add Word",
+                            actionLabel = stringResource(R.string.add_word),
                             onAction = { showAddWordDialog = true },
                         )
                     } else {
@@ -381,7 +385,7 @@ private fun AddWordDialog(
         onDismissRequest = { if (!isLoading) onDismiss() },
         title = {
             Text(
-                text = "Add Word",
+                text = stringResource(R.string.add_word),
                 style = MaterialTheme.typography.titleMedium,
             )
         },
@@ -447,7 +451,7 @@ private fun AddWordDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss, enabled = !isLoading) {
-                Text("Cancel")
+                Text(stringResource(R.string.cancel))
             }
         },
     )

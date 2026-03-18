@@ -1,5 +1,7 @@
 package com.smartnotes.ui.screens.auth
 
+import com.smartnotes.R
+
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -32,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -87,7 +91,7 @@ fun RegisterScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val focusManager = LocalFocusManager.current
 
-    val registerState by viewModel.registerState
+    val registerState = viewModel.registerState.collectAsState().value
     val passwordStrength = evaluatePasswordStrength(password)
     val strengthColor by animateColorAsState(
         targetValue = when (passwordStrength.first) {
@@ -313,7 +317,7 @@ fun RegisterScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                 }
-                Text(text = "Register")
+                Text(text = stringResource(R.string.register_link))
             }
             Spacer(modifier = Modifier.height(16.dp))
 

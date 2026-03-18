@@ -21,11 +21,11 @@ CREATE TABLE IF NOT EXISTS users (
     email           VARCHAR(100)    DEFAULT NULL,
     role            ENUM('USER','ADMIN')          NOT NULL DEFAULT 'USER',
     status          ENUM('ACTIVE','DISABLED')     NOT NULL DEFAULT 'ACTIVE',
+    token_version   INT             NOT NULL DEFAULT 0,
     created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     UNIQUE INDEX uq_users_username (username),
-    INDEX idx_users_username (username),
     INDEX idx_users_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -106,6 +106,7 @@ CREATE TABLE IF NOT EXISTS words (
     updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     INDEX idx_words_book (book_id),
+    INDEX idx_words_word (word),
     INDEX idx_words_book_sort (book_id, sort_order),
 
     CONSTRAINT fk_words_book
@@ -243,6 +244,7 @@ CREATE TABLE IF NOT EXISTS sync_cursors (
     `cursor`        BIGINT          NOT NULL DEFAULT 0,
     last_synced_at  DATETIME        DEFAULT NULL,
     updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    version         BIGINT          NOT NULL DEFAULT 0,
 
     UNIQUE INDEX uq_sync_cursors_user (user_id),
 

@@ -21,6 +21,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+
 @RestController
 @RequestMapping("/api/documents")
 @RequiredArgsConstructor
@@ -62,20 +65,37 @@ public class DocumentController {
     }
 
     /**
-     * Download a document file by ID. Returns the raw file resource directly,
-     * not wrapped in ApiResponse.
+     * Download a document file by ID. Returns the raw file resource directly
+     * for successful downloads. Error responses use ApiResponse via exception handling.
      */
-    @GetMapping("/{id}/download")
+    @GetMapping(value = "/{id}/download", produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
     public ResponseEntity<Resource> downloadDocument(@PathVariable Long id) {
         Long userId = getCurrentUserId();
         Document document = documentService.downloadDocument(userId, id);
         Resource resource = documentService.getDocumentResource(document);
 
+        String safeName = sanitizeFilename(document.getOriginalFilename());
+
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=\"" + document.getOriginalFilename() + "\"")
+                        "attachment; filename=\"" + safeName + "\"")
                 .body(resource);
+    }
+
+    /**
+     * Sanitize a filename to prevent path traversal attacks.
+     * Strips path separators, truncates to 255 chars, and URL-encodes the result.
+     */
+    private String sanitizeFilename(String filename) {
+        if (filename == null) return "download";
+        // Strip any path separators
+        String safe = filename.replaceAll("[\\\\/]", "_");
+        // Truncate to 255 characters
+        if (safe.length() > 255) {
+            safe = safe.substring(0, 255);
+        }
+        return URLEncoder.encode(safe, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     /**

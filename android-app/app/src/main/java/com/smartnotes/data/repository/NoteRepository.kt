@@ -5,10 +5,17 @@ import com.smartnotes.data.api.NoteRequest
 import com.smartnotes.data.api.NoteResponse
 import com.smartnotes.data.local.dao.NoteDao
 import com.smartnotes.data.local.entity.NoteEntity
+import android.util.Log
 import kotlinx.coroutines.flow.Flow
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private val DATE_TIME_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+
+private fun nowString(): String = LocalDateTime.now().format(DATE_TIME_FORMATTER)
 
 @Singleton
 class NoteRepository @Inject constructor(
@@ -20,8 +27,8 @@ class NoteRepository @Inject constructor(
         return noteDao.getAllNotes()
     }
 
-    suspend fun refreshNotes() {
-        try {
+    suspend fun refreshNotes(): Result<Unit> {
+        return try {
             var page = 0
             var hasMore = true
             while (hasMore) {
@@ -33,11 +40,14 @@ class NoteRepository @Inject constructor(
                     hasMore = !pageData.last
                     page++
                 } else {
+                    Log.w(TAG, "refreshNotes: non-success response at page $page: ${response.message}")
                     break
                 }
             }
-        } catch (_: Exception) {
-            // Silently fail - use local data as fallback
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "refreshNotes failed", e)
+            Result.failure(e)
         }
     }
 
@@ -79,6 +89,7 @@ class NoteRepository @Inject constructor(
                 Result.success(entity.copy(id = localId))
             } else {
                 // Save locally if server fails
+                val now = nowString()
                 val entity = NoteEntity(
                     title = title,
                     content = content,
@@ -89,13 +100,16 @@ class NoteRepository @Inject constructor(
                     reminderRingtone = reminderRingtone,
                     isEncrypted = isEncrypted,
                     isSynced = false,
-                    clientId = clientId
+                    clientId = clientId,
+                    createdAt = now,
+                    updatedAt = now
                 )
                 val localId = noteDao.insertNote(entity)
                 Result.success(entity.copy(id = localId))
             }
         } catch (e: Exception) {
             // Save locally if network fails
+            val now = nowString()
             val entity = NoteEntity(
                 title = title,
                 content = content,
@@ -106,7 +120,9 @@ class NoteRepository @Inject constructor(
                 reminderRingtone = reminderRingtone,
                 isEncrypted = isEncrypted,
                 isSynced = false,
-                clientId = clientId
+                clientId = clientId,
+                createdAt = now,
+                updatedAt = now
             )
             val localId = noteDao.insertNote(entity)
             Result.success(entity.copy(id = localId))
@@ -282,6 +298,10 @@ class NoteRepository @Inject constructor(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    companion object {
+        private const val TAG = "NoteRepository"
     }
 
     private fun NoteResponse.toEntity(): NoteEntity {

@@ -1,5 +1,7 @@
 package com.smartnotes.ui.screens.vocabulary
 
+import com.smartnotes.R
+
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.border
@@ -25,6 +27,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -34,12 +37,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -55,8 +60,8 @@ fun DictationScreen(
     onNavigateBack: () -> Unit,
     viewModel: WordBookViewModel = hiltViewModel(),
 ) {
-    val dictationSession by viewModel.dictationSession
-    val isOperationLoading by viewModel.isOperationLoading
+    val dictationSession = viewModel.dictationSession.collectAsState().value
+    val isOperationLoading = viewModel.isOperationLoading.collectAsState().value
 
     // Start the dictation session
     LaunchedEffect(bookId) {
@@ -68,7 +73,7 @@ fun DictationScreen(
             androidx.compose.material3.TopAppBar(
                 title = {
                     Text(
-                        text = dictationSession?.bookName ?: "Dictation",
+                        text = dictationSession?.bookName ?: stringResource(R.string.dictation),
                         style = MaterialTheme.typography.titleLarge,
                     )
                 },
@@ -81,7 +86,7 @@ fun DictationScreen(
         },
     ) { paddingValues ->
         if (isOperationLoading && dictationSession == null) {
-            LoadingIndicator(message = "Preparing dictation session...")
+            LoadingIndicator(message = stringResource(R.string.preparing_dictation))
             return@Scaffold
         }
 
@@ -245,7 +250,7 @@ private fun DictationInput(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(20.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 OutlinedTextField(
                     value = session.currentAnswer,
@@ -483,7 +488,7 @@ private fun DictationResultsSummary(
                 .fillMaxWidth()
                 .height(48.dp),
         ) {
-            Text(text = "Done")
+            Text(text = stringResource(R.string.done))
         }
     }
 }

@@ -2,6 +2,7 @@ package com.smartnotes.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.smartnotes.data.api.SyncStatus
 import com.smartnotes.ui.components.NoteType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -145,6 +146,9 @@ class NoteViewModel @Inject constructor(
     private val _deleteConfirmNoteId = MutableStateFlow<Long?>(null)
     val deleteConfirmNoteId: StateFlow<Long?> = _deleteConfirmNoteId.asStateFlow()
 
+    private val _syncStatus = MutableStateFlow(SyncStatus.SYNCED)
+    val syncStatus: StateFlow<SyncStatus> = _syncStatus.asStateFlow()
+
     private var currentPage = 0
     private val pageSize = 20
 
@@ -161,6 +165,7 @@ class NoteViewModel @Inject constructor(
                 currentPage = 0
                 _notesState.value = NotesUiState.Loading
             }
+            _syncStatus.value = SyncStatus.SYNCING
 
             val result = noteRepository.getNotes(
                 page = currentPage,
@@ -184,7 +189,9 @@ class NoteViewModel @Inject constructor(
                     notes = allNotes,
                     hasMore = newNotes.size == pageSize,
                 )
+                _syncStatus.value = SyncStatus.SYNCED
             } else {
+                _syncStatus.value = SyncStatus.ERROR
                 if (!append) {
                     _notesState.value = NotesUiState.Error(
                         result.exceptionOrNull()?.message ?: "Failed to load notes"
@@ -387,7 +394,13 @@ class NoteViewModel @Inject constructor(
      */
     fun syncNotes() {
         viewModelScope.launch {
-            noteRepository.syncNotes()
+            _syncStatus.value = SyncStatus.SYNCING
+            val result = noteRepository.syncNotes()
+            if (result.isSuccess) {
+                _syncStatus.value = SyncStatus.SYNCED
+            } else {
+                _syncStatus.value = SyncStatus.ERROR
+            }
             loadNotes()
         }
     }

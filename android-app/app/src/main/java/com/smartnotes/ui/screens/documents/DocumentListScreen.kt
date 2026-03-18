@@ -1,5 +1,7 @@
 package com.smartnotes.ui.screens.documents
 
+import com.smartnotes.R
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -23,6 +25,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -34,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,14 +45,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.smartnotes.ui.components.ConfirmDialog
 import com.smartnotes.ui.components.EmptyState
-import com.smartnotes.ui.components.ErrorMessage
 import com.smartnotes.ui.components.FileTypeIcon
 import com.smartnotes.ui.components.LoadingIndicator
+import com.smartnotes.ui.components.NetworkError
 import com.smartnotes.ui.components.SmartNotesTopAppBar
 import com.smartnotes.ui.viewmodel.Document
 import com.smartnotes.ui.viewmodel.DocumentViewModel
@@ -61,14 +67,14 @@ fun DocumentListScreen(
     onNavigateToPreview: (docId: Long) -> Unit,
     viewModel: DocumentViewModel = hiltViewModel(),
 ) {
-    val documentsState by viewModel.documentsState
-    val deleteConfirmDocId by viewModel.deleteConfirmDocId
+    val documentsState = viewModel.documentsState.collectAsState().value
+    val deleteConfirmDocId = viewModel.deleteConfirmDocId.collectAsState().value
     var viewMode by remember { mutableStateOf(ViewMode.LIST) }
 
     Scaffold(
         topBar = {
             SmartNotesTopAppBar(
-                title = "Documents",
+                title = stringResource(R.string.documents),
                 actions = {
                     IconButton(onClick = {
                         viewMode = if (viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST
@@ -80,9 +86,9 @@ fun DocumentListScreen(
                                 Icons.Default.List
                             },
                             contentDescription = if (viewMode == ViewMode.LIST) {
-                                "Switch to grid view"
+                                stringResource(R.string.view_mode_grid)
                             } else {
-                                "Switch to list view"
+                                stringResource(R.string.view_mode_list)
                             },
                         )
                     }
@@ -96,18 +102,18 @@ fun DocumentListScreen(
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
-                    contentDescription = "Upload document",
+                    contentDescription = stringResource(R.string.upload_document),
                 )
             }
         },
     ) { paddingValues ->
         when (documentsState) {
             is DocumentsUiState.Loading -> {
-                LoadingIndicator(message = "Loading documents...")
+                LoadingIndicator(message = stringResource(R.string.loading_documents))
             }
 
             is DocumentsUiState.Error -> {
-                ErrorMessage(
+                NetworkError(
                     message = (documentsState as DocumentsUiState.Error).message,
                     onRetry = { viewModel.loadDocuments() },
                 )
@@ -117,9 +123,10 @@ fun DocumentListScreen(
                 val documents = (documentsState as DocumentsUiState.Success).documents
                 if (documents.isEmpty()) {
                     EmptyState(
-                        message = "No documents yet. Tap + to upload one!",
-                        icon = Icons.Default.InsertDriveFile,
-                        actionLabel = "Upload Document",
+                        message = stringResource(R.string.empty_documents_title),
+                        subtitle = stringResource(R.string.empty_documents_message),
+                        icon = Icons.Default.FolderOpen,
+                        actionLabel = stringResource(R.string.upload_document),
                         onAction = onNavigateToUpload,
                     )
                 } else {
@@ -145,11 +152,11 @@ fun DocumentListScreen(
         // Delete confirmation dialog
         if (deleteConfirmDocId != null) {
             ConfirmDialog(
-                title = "Delete Document",
-                message = "Are you sure you want to delete this document? This action cannot be undone.",
+                title = stringResource(R.string.delete_document),
+                message = stringResource(R.string.delete_document_confirm),
                 onConfirm = { viewModel.deleteDocument(deleteConfirmDocId!!) },
                 onDismiss = { viewModel.dismissDeleteConfirm() },
-                confirmButtonText = "Delete",
+                confirmButtonText = stringResource(R.string.delete),
             )
         }
     }

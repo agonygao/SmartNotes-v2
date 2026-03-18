@@ -3,10 +3,12 @@ package com.smartnotes.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import com.smartnotes.core.LocaleHelper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.time.LocalDateTime
 import javax.inject.Inject
 
 // ---------------------------------------------------------------------------
@@ -22,10 +24,11 @@ enum class ThemeMode(val label: String) {
 // Settings UI state
 // ---------------------------------------------------------------------------
 data class SettingsState(
-    val backendUrl: String = "",
+    val backendUrl: String = "http://10.0.2.2:8080",
     val autoSync: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
-    val appVersion: String = "2.0.0",
+    val language: String = LocaleHelper.ENGLISH,
+    val appVersion: String = "1.0.0",
     val isSaving: Boolean = false,
     val isSyncing: Boolean = false,
     val isLoggingOut: Boolean = false,
@@ -33,6 +36,7 @@ data class SettingsState(
     val lastSyncTime: String? = null,
     val message: String? = null,
     val isError: Boolean = false,
+    val syncError: String? = null,
 )
 
 // ---------------------------------------------------------------------------
@@ -47,6 +51,8 @@ interface PreferencesManager {
     fun saveThemeMode(theme: ThemeMode)
     fun getLastSyncTime(): String?
     fun saveLastSyncTime(time: String?)
+    fun getLanguage(): String
+    fun saveLanguage(language: String)
     fun clearAll()
 }
 
@@ -63,6 +69,7 @@ class SettingsViewModel @Inject constructor(
             backendUrl = preferencesManager.getBackendUrl(),
             autoSync = preferencesManager.getAutoSync(),
             themeMode = preferencesManager.getThemeMode(),
+            language = preferencesManager.getLanguage(),
             lastSyncTime = preferencesManager.getLastSyncTime(),
         )
     )
@@ -110,12 +117,45 @@ class SettingsViewModel @Inject constructor(
         _settingsState.value = _settingsState.value.copy(themeMode = theme)
     }
 
+    fun setLanguage(language: String) {
+        preferencesManager.saveLanguage(language)
+        _settingsState.value = _settingsState.value.copy(language = language)
+        showMessage("Language changed. Restart app to take full effect.", isError = false)
+    }
+
     /**
      * Update the last sync time display.
      */
     fun updateLastSyncTime(time: String?) {
         preferencesManager.saveLastSyncTime(time)
-        _settingsState.value = _settingsState.value.copy(lastSyncTime = time)
+        _settingsState.value = _settingsState.value.copy(lastSyncTime = time, syncError = null)
+    }
+
+    /**
+     * Perform a sync operation with error feedback.
+     * [syncAction] should call the appropriate repository refresh methods.
+     */
+    fun syncNow(syncAction: suspend () -> Result<Unit>) {
+        viewModelScope.launch {
+            _settingsState.value = _settingsState.value.copy(isSyncing = true, syncError = null)
+            val result = syncAction()
+            if (result.isSuccess) {
+                val now = LocalDateTime.now().format(
+                    java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+                )
+                preferencesManager.saveLastSyncTime(now)
+                _settingsState.value = _settingsState.value.copy(
+                    isSyncing = false,
+                    lastSyncTime = now,
+                    syncError = null,
+                )
+            } else {
+                _settingsState.value = _settingsState.value.copy(
+                    isSyncing = false,
+                    syncError = result.exceptionOrNull()?.message ?: "Sync failed",
+                )
+            }
+        }
     }
 
     /**

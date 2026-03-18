@@ -26,7 +26,9 @@ class TokenManagerAdapter @Inject constructor(
     }
 
     override fun clearTokens() {
-        tokenManager.clearTokens()
+        kotlinx.coroutines.runBlocking {
+            tokenManager.clearTokens()
+        }
     }
 
     override fun isTokenValid(): Boolean {

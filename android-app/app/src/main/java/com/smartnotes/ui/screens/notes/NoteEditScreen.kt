@@ -1,5 +1,7 @@
 package com.smartnotes.ui.screens.notes
 
+import com.smartnotes.R
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,7 +24,9 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -35,10 +39,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -46,14 +51,18 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.smartnotes.ui.components.ErrorMessage
@@ -73,8 +82,11 @@ fun NoteEditScreen(
     onNavigateBack: () -> Unit,
     viewModel: NoteViewModel = hiltViewModel(),
 ) {
-    val noteEditState by viewModel.noteEditState
+    val noteEditState = viewModel.noteEditState.collectAsState().value
     val isEditMode = noteId != null && noteId > 0
+    val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
     // Form fields
     var title by remember { mutableStateOf("") }
@@ -86,6 +98,24 @@ fun NoteEditScreen(
     var isPinned by remember { mutableStateOf(false) }
     var isEncrypted by remember { mutableStateOf(false) }
     var password by remember { mutableStateOf("") }
+    var showEncryptConfirmDialog by remember { mutableStateOf(false) }
+
+    // Show save errors via snackbar
+    LaunchedEffect(noteEditState) {
+        if (noteEditState is NoteEditUiState.Error) {
+            val rawMessage = (noteEditState as NoteEditUiState.Error).message
+            val message = when {
+                rawMessage.contains("decrypt", ignoreCase = true) ||
+                    rawMessage.contains("cipher", ignoreCase = true) ||
+                    rawMessage.contains("password", ignoreCase = true) ->
+                    stringResource(R.string.encryption_decrypt_failed)
+                rawMessage.contains("encrypt", ignoreCase = true) ->
+                    stringResource(R.string.encryption_save_failed)
+                else -> rawMessage
+            }
+            snackbarHostState.showSnackbar(message = message)
+        }
+    }
 
     // Checklist item being edited
     var newChecklistText by remember { mutableStateOf("") }
@@ -125,19 +155,20 @@ fun NoteEditScreen(
     // Repeat rule dropdown state
     var repeatDropdownExpanded by remember { mutableStateOf(false) }
     val repeatOptions = listOf(
-        null to "No Repeat",
-        "DAILY" to "Daily",
-        "WEEKLY" to "Weekly",
-        "MONTHLY" to "Monthly",
-        "YEARLY" to "Yearly",
+        null to stringResource(R.string.no_repeat),
+        "DAILY" to stringResource(R.string.daily),
+        "WEEKLY" to stringResource(R.string.weekly),
+        "MONTHLY" to stringResource(R.string.monthly),
+        "YEARLY" to stringResource(R.string.yearly),
     )
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             androidx.compose.material3.TopAppBar(
                 title = {
                     Text(
-                        text = if (isEditMode) "Edit Note" else "New Note",
+                        text = if (isEditMode) stringResource(R.string.edit_note) else stringResource(R.string.new_note),
                         style = MaterialTheme.typography.titleLarge,
                     )
                 },
@@ -147,23 +178,41 @@ fun NoteEditScreen(
                 actions = {
                     IconButton(
                         onClick = {
-                            viewModel.saveNote(
-                                noteId = noteId,
-                                title = title,
-                                content = content,
-                                type = selectedType,
-                                checklistItems = if (selectedType == NoteType.CHECKLIST) checklistItems else emptyList(),
-                                reminderTime = reminderDate,
-                                reminderRepeatRule = reminderRepeatRule,
-                                isPinned = isPinned,
-                                isEncrypted = isEncrypted,
-                                password = if (isEncrypted) password else null,
-                            )
+                            if (selectedType == NoteType.SECRET) {
+                                if (password.isBlank()) {
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            message = context.getString(R.string.encryption_password_required)
+                                        )
+                                    }
+                                } else if (password.length < 4) {
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            message = context.getString(R.string.encryption_password_short)
+                                        )
+                                    }
+                                } else {
+                                    showEncryptConfirmDialog = true
+                                }
+                            } else {
+                                viewModel.saveNote(
+                                    noteId = noteId,
+                                    title = title,
+                                    content = content,
+                                    type = selectedType,
+                                    checklistItems = if (selectedType == NoteType.CHECKLIST) checklistItems else emptyList(),
+                                    reminderTime = reminderDate,
+                                    reminderRepeatRule = reminderRepeatRule,
+                                    isPinned = isPinned,
+                                    isEncrypted = isEncrypted,
+                                    password = if (isEncrypted) password else null,
+                                )
+                            }
                         },
                     ) {
                         Icon(
                             imageVector = Icons.Default.Check,
-                            contentDescription = "Save note",
+                            contentDescription = stringResource(R.string.save),
                             tint = MaterialTheme.colorScheme.primary,
                         )
                     }
@@ -177,7 +226,7 @@ fun NoteEditScreen(
     ) { paddingValues ->
         when (noteEditState) {
             is NoteEditUiState.Loading -> {
-                LoadingIndicator(message = if (isEditMode) "Loading note..." else null)
+                LoadingIndicator(message = if (isEditMode) stringResource(R.string.loading_notes) else null)
             }
             is NoteEditUiState.Error -> {
                 ErrorMessage(
@@ -203,8 +252,8 @@ fun NoteEditScreen(
                     OutlinedTextField(
                         value = title,
                         onValueChange = { title = it },
-                        label = { Text("Title") },
-                        placeholder = { Text("Enter note title") },
+                        label = { Text(stringResource(R.string.title)) },
+                        placeholder = { Text(stringResource(R.string.enter_title)) },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.fillMaxWidth(),
@@ -215,14 +264,14 @@ fun NoteEditScreen(
                         OutlinedTextField(
                             value = content,
                             onValueChange = { content = it },
-                            label = { Text("Content") },
+                            label = { Text(stringResource(R.string.content)) },
                             placeholder = {
                                 Text(
                                     when (selectedType) {
-                                        NoteType.NORMAL -> "Write your note here..."
-                                        NoteType.REMINDER -> "Add reminder details..."
-                                        NoteType.SECRET -> "Write your secret note..."
-                                        else -> "Write content here..."
+                                        NoteType.NORMAL -> stringResource(R.string.write_here)
+                                        NoteType.REMINDER -> stringResource(R.string.write_here)
+                                        NoteType.SECRET -> stringResource(R.string.write_here)
+                                        else -> stringResource(R.string.write_here)
                                     }
                                 )
                             },
@@ -241,13 +290,13 @@ fun NoteEditScreen(
                             value = selectedType.label,
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("Note Type") },
+                            label = { Text(stringResource(R.string.note_type)) },
                             trailingIcon = {
                                 ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeDropdownExpanded)
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                                .menuAnchor(),
                         )
                         ExposedDropdownMenu(
                             expanded = typeDropdownExpanded,
@@ -270,7 +319,7 @@ fun NoteEditScreen(
                     // ----------------------------------------------------------
                     if (selectedType == NoteType.CHECKLIST) {
                         Text(
-                            text = "Checklist Items",
+                            text = stringResource(R.string.checklist_items),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -312,7 +361,7 @@ fun NoteEditScreen(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Close,
-                                            contentDescription = "Remove item",
+                                            contentDescription = stringResource(R.string.delete),
                                             modifier = Modifier.size(18.dp),
                                             tint = MaterialTheme.colorScheme.error,
                                         )
@@ -330,7 +379,7 @@ fun NoteEditScreen(
                             OutlinedTextField(
                                 value = newChecklistText,
                                 onValueChange = { newChecklistText = it },
-                                placeholder = { Text("New item...") },
+                                placeholder = { Text(stringResource(R.string.new_item)) },
                                 singleLine = true,
                                 modifier = Modifier.weight(1f),
                             )
@@ -347,7 +396,7 @@ fun NoteEditScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Add,
-                                    contentDescription = "Add item",
+                                    contentDescription = stringResource(R.string.add),
                                     tint = MaterialTheme.colorScheme.primary,
                                 )
                             }
@@ -359,7 +408,7 @@ fun NoteEditScreen(
                     // ----------------------------------------------------------
                     if (selectedType == NoteType.REMINDER) {
                         Text(
-                            text = "Reminder Settings",
+                            text = stringResource(R.string.reminder_settings),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -380,7 +429,7 @@ fun NoteEditScreen(
                             Text(
                                 text = reminderDate?.let {
                                     it.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
-                                } ?: "Select date and time",
+                                } ?: stringResource(R.string.select_date_time),
                             )
                         }
 
@@ -392,16 +441,16 @@ fun NoteEditScreen(
                             onExpandedChange = { repeatDropdownExpanded = it },
                         ) {
                             OutlinedTextField(
-                                value = reminderRepeatRule ?: "No Repeat",
+                                value = reminderRepeatRule ?: stringResource(R.string.no_repeat),
                                 onValueChange = {},
                                 readOnly = true,
-                                label = { Text("Repeat") },
+                                label = { Text(stringResource(R.string.repeat)) },
                                 trailingIcon = {
                                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = repeatDropdownExpanded)
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                                    .menuAnchor(),
                             )
                             ExposedDropdownMenu(
                                 expanded = repeatDropdownExpanded,
@@ -425,20 +474,20 @@ fun NoteEditScreen(
                     // ----------------------------------------------------------
                     if (selectedType == NoteType.SECRET) {
                         Text(
-                            text = "Encryption",
+                            text = stringResource(R.string.encryption),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                         )
                         OutlinedTextField(
                             value = password,
                             onValueChange = { password = it },
-                            label = { Text("Encryption Password") },
-                            placeholder = { Text("Enter password to encrypt this note") },
+                            label = { Text(stringResource(R.string.encryption_password)) },
+                            placeholder = { Text(stringResource(R.string.encryption_hint)) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                         )
                         Text(
-                            text = "This note will be encrypted with your password. You will need this password to view it later.",
+                            text = stringResource(R.string.encryption_desc),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -472,7 +521,7 @@ fun NoteEditScreen(
                                         modifier = Modifier.size(20.dp),
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Pin to Top", style = MaterialTheme.typography.bodyMedium)
+                                    Text(stringResource(R.string.pin_to_top), style = MaterialTheme.typography.bodyMedium)
                                 }
                                 Switch(
                                     checked = isPinned,
@@ -484,6 +533,58 @@ fun NoteEditScreen(
 
                     Spacer(modifier = Modifier.height(32.dp))
                 }
+            }
+
+            // Encryption confirmation dialog
+            if (showEncryptConfirmDialog) {
+                AlertDialog(
+                    onDismissRequest = { showEncryptConfirmDialog = false },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    },
+                    title = {
+                        Text(
+                            text = stringResource(R.string.encryption_confirm_title),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = stringResource(R.string.encryption_confirm_message),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showEncryptConfirmDialog = false
+                                viewModel.saveNote(
+                                    noteId = noteId,
+                                    title = title,
+                                    content = content,
+                                    type = selectedType,
+                                    checklistItems = if (selectedType == NoteType.CHECKLIST) checklistItems else emptyList(),
+                                    reminderTime = reminderDate,
+                                    reminderRepeatRule = reminderRepeatRule,
+                                    isPinned = isPinned,
+                                    isEncrypted = true,
+                                    password = password.ifBlank { null },
+                                )
+                            },
+                        ) {
+                            Text(stringResource(R.string.confirm))
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showEncryptConfirmDialog = false }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    },
+                )
             }
         }
     }

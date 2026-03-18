@@ -2,6 +2,14 @@ package com.smartnotes.data.api
 
 import com.google.gson.annotations.SerializedName
 
+/**
+ * Unified API response wrapper.
+ *
+ * All datetime fields in response DTOs (e.g., `createdAt`, `updatedAt`) are received as
+ * [String] from the server in ISO-8601 format (e.g., "2025-01-15T10:30:00").
+ * Future improvement: add a Gson TypeAdapter to parse them directly into
+ * [java.time.LocalDateTime] for type safety at the deserialization boundary.
+ */
 data class ApiResponse<T>(
     @SerializedName("code") val code: Int,
     @SerializedName("message") val message: String,

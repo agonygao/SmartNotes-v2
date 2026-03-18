@@ -26,7 +26,7 @@ public class WordReviewController {
     private final WordReviewService wordReviewService;
 
     @PostMapping("/words")
-    public ApiResponse<WordReviewResponse> getReviewWords(@RequestBody WordReviewRequest req) {
+    public ApiResponse<WordReviewResponse> getReviewWords(@Valid @RequestBody WordReviewRequest req) {
         Long userId = getCurrentUserId();
         return ApiResponse.success(wordReviewService.getReviewWords(userId, req));
     }

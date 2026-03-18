@@ -6,6 +6,7 @@ import com.smartnotes.dto.SyncPullResponse;
 import com.smartnotes.dto.SyncPushRequest;
 import com.smartnotes.dto.SyncPushResponse;
 import com.smartnotes.service.SyncService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
@@ -32,7 +33,7 @@ public class SyncController {
      * Push local changes to the server.
      */
     @PostMapping("/push")
-    public ApiResponse<SyncPushResponse> push(@RequestBody List<SyncPushRequest> changes) {
+    public ApiResponse<SyncPushResponse> push(@Valid @RequestBody List<SyncPushRequest> changes) {
         Long userId = getCurrentUserId();
         log.info("Sync push: userId={}, changesCount={}", userId, changes != null ? changes.size() : 0);
         SyncPushResponse response = syncService.push(userId, changes);

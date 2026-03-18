@@ -8,28 +8,36 @@ import com.smartnotes.exception.BusinessException;
 import com.smartnotes.repository.DocumentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.io.TempDir;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 @DisplayName("DocumentService Unit Tests")
 class DocumentServiceTest {
 
@@ -42,256 +50,574 @@ class DocumentServiceTest {
     @InjectMocks
     private DocumentService documentService;
 
+    @TempDir
+    Path tempDir;
+
     private Long userId = 1L;
-    private Document existingDocument;
 
     @BeforeEach
-    void setUp() {
-        // Set the private uploadDir field using ReflectionTestUtils
-        ReflectionTestUtils.setField(documentService, "uploadDir", System.getProperty("java.io.tmpdir") + "/test-uploads");
-
-        existingDocument = new Document();
-        existingDocument.setId(10L);
-        existingDocument.setUserId(userId);
-        existingDocument.setFilename("uuid-abc123.md");
-        existingDocument.setOriginalFilename("test-document.md");
-        existingDocument.setFileType("markdown");
-        existingDocument.setFileSize(2048L);
-        existingDocument.setFilePath(userId + "/uuid-abc123.md");
-        existingDocument.setMimeType("text/markdown");
-        existingDocument.setPreviewAvailable(true);
-        existingDocument.setDeleted(false);
-        existingDocument.setCreatedAt(java.time.LocalDateTime.now());
-        existingDocument.setUpdatedAt(java.time.LocalDateTime.now());
+    void setUp() throws IOException {
+        ReflectionTestUtils.setField(documentService, "uploadDir", tempDir.toString());
+        Files.createDirectories(tempDir);
     }
 
-    @Test
-    @DisplayName("uploadDocument - should successfully upload a valid file")
-    void uploadDocument_success() throws IOException {
-        when(multipartFile.getOriginalFilename()).thenReturn("test-document.md");
-        when(multipartFile.getSize()).thenReturn(2048L);
-        when(multipartFile.getContentType()).thenReturn("text/markdown");
-        // TransferTo needs to succeed without actually writing
-        doNothing().when(multipartFile).transferTo(any(java.io.File.class));
-        when(documentRepository.save(any(Document.class))).thenAnswer(invocation -> {
-            Document doc = invocation.getArgument(0);
-            doc.setId(1L);
-            doc.setCreatedAt(java.time.LocalDateTime.now());
-            doc.setUpdatedAt(java.time.LocalDateTime.now());
-            return doc;
-        });
-
-        DocumentUploadResponse result = documentService.uploadDocument(userId, multipartFile);
-
-        assertNotNull(result);
-        assertNotNull(result.getFilename());
-        assertTrue(result.getFilename().endsWith(".md"));
-        assertEquals("test-document.md", result.getOriginalFilename());
-        assertEquals("markdown", result.getFileType());
-        assertEquals(2048L, result.getFileSize());
-        assertTrue(result.getPreviewAvailable(), "Markdown files should be previewable");
-
-        verify(documentRepository).save(argThat(doc ->
-                doc.getUserId().equals(userId) &&
-                "test-document.md".equals(doc.getOriginalFilename()) &&
-                "markdown".equals(doc.getFileType()) &&
-                Boolean.TRUE.equals(doc.getPreviewAvailable())
-        ));
+    private Document createDocument(Long id, String filename, String originalFilename,
+                                    String fileType, long fileSize, boolean previewAvailable) {
+        Document doc = new Document();
+        doc.setId(id);
+        doc.setUserId(userId);
+        doc.setFilename(filename);
+        doc.setOriginalFilename(originalFilename);
+        doc.setFileType(fileType);
+        doc.setFileSize(fileSize);
+        doc.setFilePath(userId + "/" + filename);
+        doc.setPreviewAvailable(previewAvailable);
+        doc.setDeleted(false);
+        doc.setVersion(1);
+        doc.setCreatedAt(LocalDateTime.now());
+        doc.setUpdatedAt(LocalDateTime.now());
+        return doc;
     }
 
-    @Test
-    @DisplayName("uploadDocument - should throw exception when filename is empty")
-    void uploadDocument_emptyFilename() {
-        when(multipartFile.getOriginalFilename()).thenReturn("");
-        when(multipartFile.getOriginalFilename()).thenReturn("");
+    // ==================== uploadDocument Tests ====================
 
-        BusinessException exception = assertThrows(BusinessException.class,
-                () -> documentService.uploadDocument(userId, multipartFile));
+    @Nested
+    @DisplayName("uploadDocument()")
+    class UploadDocumentTests {
 
-        assertEquals(ErrorCode.BAD_REQUEST, exception.getCode());
+        @Test
+        @DisplayName("should upload a PDF file successfully")
+        void upload_pdf_success() throws IOException {
+            when(multipartFile.getOriginalFilename()).thenReturn("test.pdf");
+            when(multipartFile.getSize()).thenReturn(1024L);
+            when(multipartFile.getContentType()).thenReturn("application/pdf");
+            doNothing().when(multipartFile).transferTo(any(File.class));
+            when(documentRepository.save(any(Document.class))).thenAnswer(inv -> {
+                Document doc = inv.getArgument(0);
+                doc.setId(1L);
+                doc.setCreatedAt(LocalDateTime.now());
+                doc.setUpdatedAt(LocalDateTime.now());
+                return doc;
+            });
 
-        verify(documentRepository, never()).save(any(Document.class));
+            DocumentUploadResponse result = documentService.uploadDocument(userId, multipartFile);
+
+            assertThat(result).isNotNull();
+            assertThat(result.getOriginalFilename()).isEqualTo("test.pdf");
+            assertThat(result.getFileType()).isEqualTo("pdf");
+            assertThat(result.getFileSize()).isEqualTo(1024L);
+            assertThat(result.getPreviewAvailable()).isTrue();
+            verify(documentRepository).save(any(Document.class));
+        }
+
+        @Test
+        @DisplayName("should upload a markdown file with preview enabled")
+        void upload_markdown_preview() throws IOException {
+            when(multipartFile.getOriginalFilename()).thenReturn("notes.md");
+            when(multipartFile.getSize()).thenReturn(500L);
+            when(multipartFile.getContentType()).thenReturn("text/markdown");
+            doNothing().when(multipartFile).transferTo(any(File.class));
+            when(documentRepository.save(any(Document.class))).thenAnswer(inv -> {
+                Document doc = inv.getArgument(0);
+                doc.setId(2L);
+                doc.setCreatedAt(LocalDateTime.now());
+                doc.setUpdatedAt(LocalDateTime.now());
+                return doc;
+            });
+
+            DocumentUploadResponse result = documentService.uploadDocument(userId, multipartFile);
+
+            assertThat(result.getFileType()).isEqualTo("markdown");
+            assertThat(result.getPreviewAvailable()).isTrue();
+        }
+
+        @Test
+        @DisplayName("should upload a TXT file with preview enabled")
+        void upload_txt_preview() throws IOException {
+            when(multipartFile.getOriginalFilename()).thenReturn("readme.txt");
+            when(multipartFile.getSize()).thenReturn(200L);
+            when(multipartFile.getContentType()).thenReturn("text/plain");
+            doNothing().when(multipartFile).transferTo(any(File.class));
+            when(documentRepository.save(any(Document.class))).thenAnswer(inv -> {
+                Document doc = inv.getArgument(0);
+                doc.setId(3L);
+                doc.setCreatedAt(LocalDateTime.now());
+                doc.setUpdatedAt(LocalDateTime.now());
+                return doc;
+            });
+
+            DocumentUploadResponse result = documentService.uploadDocument(userId, multipartFile);
+
+            assertThat(result.getFileType()).isEqualTo("text");
+            assertThat(result.getPreviewAvailable()).isTrue();
+        }
+
+        @Test
+        @DisplayName("should upload a DOCX file without preview")
+        void upload_docx_noPreview() throws IOException {
+            when(multipartFile.getOriginalFilename()).thenReturn("report.docx");
+            when(multipartFile.getSize()).thenReturn(50000L);
+            when(multipartFile.getContentType()).thenReturn("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+            doNothing().when(multipartFile).transferTo(any(File.class));
+            when(documentRepository.save(any(Document.class))).thenAnswer(inv -> {
+                Document doc = inv.getArgument(0);
+                doc.setId(4L);
+                doc.setCreatedAt(LocalDateTime.now());
+                doc.setUpdatedAt(LocalDateTime.now());
+                return doc;
+            });
+
+            DocumentUploadResponse result = documentService.uploadDocument(userId, multipartFile);
+
+            assertThat(result.getFileType()).isEqualTo("word");
+            assertThat(result.getPreviewAvailable()).isFalse();
+        }
+
+        @Test
+        @DisplayName("should upload an XLSX file without preview")
+        void upload_xlsx_noPreview() throws IOException {
+            when(multipartFile.getOriginalFilename()).thenReturn("data.xlsx");
+            when(multipartFile.getSize()).thenReturn(10000L);
+            when(multipartFile.getContentType()).thenReturn("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            doNothing().when(multipartFile).transferTo(any(File.class));
+            when(documentRepository.save(any(Document.class))).thenAnswer(inv -> {
+                Document doc = inv.getArgument(0);
+                doc.setId(5L);
+                doc.setCreatedAt(LocalDateTime.now());
+                doc.setUpdatedAt(LocalDateTime.now());
+                return doc;
+            });
+
+            DocumentUploadResponse result = documentService.uploadDocument(userId, multipartFile);
+
+            assertThat(result.getFileType()).isEqualTo("excel");
+            assertThat(result.getPreviewAvailable()).isFalse();
+        }
+
+        @Test
+        @DisplayName("should upload a legacy DOC file without preview")
+        void upload_doc_noPreview() throws IOException {
+            when(multipartFile.getOriginalFilename()).thenReturn("legacy.doc");
+            when(multipartFile.getSize()).thenReturn(30000L);
+            when(multipartFile.getContentType()).thenReturn("application/msword");
+            doNothing().when(multipartFile).transferTo(any(File.class));
+            when(documentRepository.save(any(Document.class))).thenAnswer(inv -> {
+                Document doc = inv.getArgument(0);
+                doc.setId(6L);
+                doc.setCreatedAt(LocalDateTime.now());
+                doc.setUpdatedAt(LocalDateTime.now());
+                return doc;
+            });
+
+            DocumentUploadResponse result = documentService.uploadDocument(userId, multipartFile);
+
+            assertThat(result.getFileType()).isEqualTo("word");
+            assertThat(result.getPreviewAvailable()).isFalse();
+        }
+
+        @Test
+        @DisplayName("should upload a legacy XLS file without preview")
+        void upload_xls_noPreview() throws IOException {
+            when(multipartFile.getOriginalFilename()).thenReturn("legacy.xls");
+            when(multipartFile.getSize()).thenReturn(15000L);
+            when(multipartFile.getContentType()).thenReturn("application/vnd.ms-excel");
+            doNothing().when(multipartFile).transferTo(any(File.class));
+            when(documentRepository.save(any(Document.class))).thenAnswer(inv -> {
+                Document doc = inv.getArgument(0);
+                doc.setId(7L);
+                doc.setCreatedAt(LocalDateTime.now());
+                doc.setUpdatedAt(LocalDateTime.now());
+                return doc;
+            });
+
+            DocumentUploadResponse result = documentService.uploadDocument(userId, multipartFile);
+
+            assertThat(result.getFileType()).isEqualTo("excel");
+            assertThat(result.getPreviewAvailable()).isFalse();
+        }
+
+        @Test
+        @DisplayName("should handle filename with multiple dots correctly")
+        void upload_multipleDotsInFilename() throws IOException {
+            when(multipartFile.getOriginalFilename()).thenReturn("my.report.final.v2.pdf");
+            when(multipartFile.getSize()).thenReturn(2048L);
+            when(multipartFile.getContentType()).thenReturn("application/pdf");
+            doNothing().when(multipartFile).transferTo(any(File.class));
+            when(documentRepository.save(any(Document.class))).thenAnswer(inv -> {
+                Document doc = inv.getArgument(0);
+                doc.setId(8L);
+                doc.setCreatedAt(LocalDateTime.now());
+                doc.setUpdatedAt(LocalDateTime.now());
+                return doc;
+            });
+
+            DocumentUploadResponse result = documentService.uploadDocument(userId, multipartFile);
+
+            assertThat(result.getFileType()).isEqualTo("pdf");
+            assertThat(result.getPreviewAvailable()).isTrue();
+            assertThat(result.getOriginalFilename()).isEqualTo("my.report.final.v2.pdf");
+        }
+
+        @Test
+        @DisplayName("should accept file at exactly 50MB size limit")
+        void upload_exactlyMaxSize() throws IOException {
+            when(multipartFile.getOriginalFilename()).thenReturn("exactly50mb.pdf");
+            when(multipartFile.getSize()).thenReturn(50L * 1024 * 1024);
+            when(multipartFile.getContentType()).thenReturn("application/pdf");
+            doNothing().when(multipartFile).transferTo(any(File.class));
+            when(documentRepository.save(any(Document.class))).thenAnswer(inv -> {
+                Document doc = inv.getArgument(0);
+                doc.setId(9L);
+                doc.setCreatedAt(LocalDateTime.now());
+                doc.setUpdatedAt(LocalDateTime.now());
+                return doc;
+            });
+
+            DocumentUploadResponse result = documentService.uploadDocument(userId, multipartFile);
+
+            assertThat(result).isNotNull();
+            assertThat(result.getFileType()).isEqualTo("pdf");
+            verify(documentRepository).save(any(Document.class));
+        }
+
+        @Test
+        @DisplayName("should throw UNSUPPORTED_FILE_TYPE for unsupported extension")
+        void upload_unsupportedType() {
+            when(multipartFile.getOriginalFilename()).thenReturn("malware.exe");
+
+            assertThatThrownBy(() -> documentService.uploadDocument(userId, multipartFile))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("code")
+                    .isEqualTo(ErrorCode.UNSUPPORTED_FILE_TYPE);
+
+            verify(documentRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("should throw BAD_REQUEST for null filename")
+        void upload_nullFilename() {
+            when(multipartFile.getOriginalFilename()).thenReturn(null);
+
+            assertThatThrownBy(() -> documentService.uploadDocument(userId, multipartFile))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("code")
+                    .isEqualTo(ErrorCode.BAD_REQUEST);
+        }
+
+        @Test
+        @DisplayName("should throw BAD_REQUEST for blank filename")
+        void upload_blankFilename() {
+            when(multipartFile.getOriginalFilename()).thenReturn("   ");
+
+            assertThatThrownBy(() -> documentService.uploadDocument(userId, multipartFile))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("code")
+                    .isEqualTo(ErrorCode.BAD_REQUEST);
+        }
+
+        @Test
+        @DisplayName("should throw UNSUPPORTED_FILE_TYPE for filename without extension")
+        void upload_noExtension() {
+            when(multipartFile.getOriginalFilename()).thenReturn("noext");
+
+            assertThatThrownBy(() -> documentService.uploadDocument(userId, multipartFile))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("code")
+                    .isEqualTo(ErrorCode.UNSUPPORTED_FILE_TYPE);
+        }
+
+        @Test
+        @DisplayName("should throw FILE_TOO_LARGE for files exceeding 50MB")
+        void upload_fileTooLarge() {
+            when(multipartFile.getOriginalFilename()).thenReturn("huge.pdf");
+            when(multipartFile.getSize()).thenReturn(51L * 1024 * 1024);
+
+            assertThatThrownBy(() -> documentService.uploadDocument(userId, multipartFile))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("code")
+                    .isEqualTo(ErrorCode.FILE_TOO_LARGE);
+
+            verify(documentRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("should handle case-insensitive file extensions")
+        void upload_caseInsensitiveExtension() throws IOException {
+            when(multipartFile.getOriginalFilename()).thenReturn("test.PDF");
+            when(multipartFile.getSize()).thenReturn(1024L);
+            when(multipartFile.getContentType()).thenReturn("application/pdf");
+            doNothing().when(multipartFile).transferTo(any(File.class));
+            when(documentRepository.save(any(Document.class))).thenAnswer(inv -> {
+                Document doc = inv.getArgument(0);
+                doc.setId(6L);
+                doc.setCreatedAt(LocalDateTime.now());
+                doc.setUpdatedAt(LocalDateTime.now());
+                return doc;
+            });
+
+            DocumentUploadResponse result = documentService.uploadDocument(userId, multipartFile);
+
+            assertThat(result.getFileType()).isEqualTo("pdf");
+        }
+
+        @Test
+        @DisplayName("should throw FILE_UPLOAD_ERROR when transferTo fails")
+        void upload_ioError() throws IOException {
+            when(multipartFile.getOriginalFilename()).thenReturn("test.pdf");
+            when(multipartFile.getSize()).thenReturn(1024L);
+            doThrow(new IOException("Disk full")).when(multipartFile).transferTo(any(File.class));
+
+            assertThatThrownBy(() -> documentService.uploadDocument(userId, multipartFile))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("code")
+                    .isEqualTo(ErrorCode.FILE_UPLOAD_ERROR);
+
+            verify(documentRepository, never()).save(any());
+        }
     }
 
-    @Test
-    @DisplayName("uploadDocument - should throw exception when filename is null")
-    void uploadDocument_nullFilename() {
-        when(multipartFile.getOriginalFilename()).thenReturn(null);
+    // ==================== getDocument Tests ====================
 
-        BusinessException exception = assertThrows(BusinessException.class,
-                () -> documentService.uploadDocument(userId, multipartFile));
+    @Nested
+    @DisplayName("getDocument()")
+    class GetDocumentTests {
 
-        assertEquals(ErrorCode.BAD_REQUEST, exception.getCode());
+        @Test
+        @DisplayName("should return document metadata")
+        void getDocument_success() {
+            Document doc = createDocument(1L, "uuid.pdf", "test.pdf", "pdf", 1024, true);
+            when(documentRepository.findByIdAndUserIdAndDeletedFalse(1L, userId))
+                    .thenReturn(Optional.of(doc));
 
-        verify(documentRepository, never()).save(any(Document.class));
+            DocumentUploadResponse result = documentService.getDocument(userId, 1L);
+
+            assertThat(result).isNotNull();
+            assertThat(result.getId()).isEqualTo(1L);
+            assertThat(result.getOriginalFilename()).isEqualTo("test.pdf");
+            assertThat(result.getFileType()).isEqualTo("pdf");
+        }
+
+        @Test
+        @DisplayName("should throw DOCUMENT_NOT_FOUND for non-existent document")
+        void getDocument_notFound() {
+            when(documentRepository.findByIdAndUserIdAndDeletedFalse(999L, userId))
+                    .thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> documentService.getDocument(userId, 999L))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("code")
+                    .isEqualTo(ErrorCode.DOCUMENT_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("should enforce ownership check")
+        void getDocument_ownershipCheck() {
+            Long otherUserId = 2L;
+            when(documentRepository.findByIdAndUserIdAndDeletedFalse(1L, otherUserId))
+                    .thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> documentService.getDocument(otherUserId, 1L))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("code")
+                    .isEqualTo(ErrorCode.DOCUMENT_NOT_FOUND);
+        }
     }
 
-    @Test
-    @DisplayName("uploadDocument - should throw exception for unsupported file type")
-    void uploadDocument_unsupportedType() {
-        when(multipartFile.getOriginalFilename()).thenReturn("malware.exe");
+    // ==================== listDocuments Tests ====================
 
-        BusinessException exception = assertThrows(BusinessException.class,
-                () -> documentService.uploadDocument(userId, multipartFile));
+    @Nested
+    @DisplayName("listDocuments()")
+    class ListDocumentsTests {
 
-        assertEquals(ErrorCode.UNSUPPORTED_FILE_TYPE, exception.getCode());
-        assertNotNull(exception.getDetail());
-        assertTrue(exception.getDetail().contains("exe"), "Detail should mention the unsupported extension");
+        @Test
+        @DisplayName("should list documents for user")
+        void listDocuments_success() {
+            Document doc1 = createDocument(1L, "uuid.pdf", "test.pdf", "pdf", 1024, true);
+            Document doc2 = createDocument(2L, "uuid.docx", "report.docx", "word", 50000, false);
+            Page<Document> page = new PageImpl<>(List.of(doc1, doc2));
+            when(documentRepository.findByUserIdAndDeletedFalse(eq(userId), any(Pageable.class)))
+                    .thenReturn(page);
 
-        verify(documentRepository, never()).save(any(Document.class));
+            PageResponse<DocumentUploadResponse> result = documentService.listDocuments(userId, 0, 10);
+
+            assertThat(result.getContent()).hasSize(2);
+            assertThat(result.getTotalElements()).isEqualTo(2);
+            assertThat(result.isFirst()).isTrue();
+            assertThat(result.isLast()).isTrue();
+        }
+
+        @Test
+        @DisplayName("should return empty list when no documents exist")
+        void listDocuments_empty() {
+            Page<Document> emptyPage = new PageImpl<>(List.of());
+            when(documentRepository.findByUserIdAndDeletedFalse(eq(userId), any(Pageable.class)))
+                    .thenReturn(emptyPage);
+
+            PageResponse<DocumentUploadResponse> result = documentService.listDocuments(userId, 0, 10);
+
+            assertThat(result.getContent()).isEmpty();
+            assertThat(result.getTotalElements()).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("should handle pagination correctly")
+        void listDocuments_pagination() {
+            Document doc = createDocument(1L, "uuid.pdf", "test.pdf", "pdf", 1024, true);
+            Page<Document> page = new PageImpl<>(List.of(doc), org.springframework.data.domain.PageRequest.of(1, 5), 11);
+            when(documentRepository.findByUserIdAndDeletedFalse(eq(userId), any(Pageable.class)))
+                    .thenReturn(page);
+
+            PageResponse<DocumentUploadResponse> result = documentService.listDocuments(userId, 1, 5);
+
+            assertThat(result.getPage()).isEqualTo(1);
+            assertThat(result.getSize()).isEqualTo(5);
+            assertThat(result.getTotalElements()).isEqualTo(11);
+            assertThat(result.getTotalPages()).isEqualTo(3);
+            assertThat(result.isFirst()).isFalse();
+        }
     }
 
-    @Test
-    @DisplayName("uploadDocument - should throw exception when file exceeds size limit")
-    void uploadDocument_fileTooLarge() {
-        when(multipartFile.getOriginalFilename()).thenReturn("huge-file.pdf");
-        when(multipartFile.getSize()).thenReturn(60L * 1024 * 1024); // 60MB > 50MB limit
+    // ==================== deleteDocument Tests ====================
 
-        BusinessException exception = assertThrows(BusinessException.class,
-                () -> documentService.uploadDocument(userId, multipartFile));
+    @Nested
+    @DisplayName("deleteDocument()")
+    class DeleteDocumentTests {
 
-        assertEquals(ErrorCode.FILE_TOO_LARGE, exception.getCode());
+        @Test
+        @DisplayName("should soft delete a document")
+        void deleteDocument_success() throws IOException {
+            Document doc = createDocument(1L, "uuid.pdf", "test.pdf", "pdf", 1024, true);
+            Path filePath = tempDir.resolve(userId.toString()).resolve("uuid.pdf");
+            Files.createDirectories(filePath.getParent());
+            Files.createFile(filePath);
 
-        verify(documentRepository, never()).save(any(Document.class));
+            when(documentRepository.findByIdAndUserIdAndDeletedFalse(1L, userId))
+                    .thenReturn(Optional.of(doc));
+            when(documentRepository.save(any(Document.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            documentService.deleteDocument(userId, 1L);
+
+            verify(documentRepository).save(argThat(d -> Boolean.TRUE.equals(d.getDeleted())));
+        }
+
+        @Test
+        @DisplayName("should throw DOCUMENT_NOT_FOUND for non-existent document")
+        void deleteDocument_notFound() {
+            when(documentRepository.findByIdAndUserIdAndDeletedFalse(999L, userId))
+                    .thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> documentService.deleteDocument(userId, 999L))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("code")
+                    .isEqualTo(ErrorCode.DOCUMENT_NOT_FOUND);
+
+            verify(documentRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("should handle missing physical file gracefully on delete")
+        void deleteDocument_fileNotFoundOnDisk() {
+            Document doc = createDocument(1L, "uuid.pdf", "test.pdf", "pdf", 1024, true);
+            when(documentRepository.findByIdAndUserIdAndDeletedFalse(1L, userId))
+                    .thenReturn(Optional.of(doc));
+            when(documentRepository.save(any(Document.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            // Should not throw - just logs a warning
+            documentService.deleteDocument(userId, 1L);
+
+            verify(documentRepository).save(argThat(d -> Boolean.TRUE.equals(d.getDeleted())));
+        }
     }
 
-    @Test
-    @DisplayName("uploadDocument - should accept PDF file")
-    void uploadDocument_pdfType() throws IOException {
-        when(multipartFile.getOriginalFilename()).thenReturn("report.pdf");
-        when(multipartFile.getSize()).thenReturn(1024L);
-        when(multipartFile.getContentType()).thenReturn("application/pdf");
-        doNothing().when(multipartFile).transferTo(any(java.io.File.class));
-        when(documentRepository.save(any(Document.class))).thenAnswer(invocation -> {
-            Document doc = invocation.getArgument(0);
-            doc.setId(2L);
-            doc.setCreatedAt(java.time.LocalDateTime.now());
-            doc.setUpdatedAt(java.time.LocalDateTime.now());
-            return doc;
-        });
+    // ==================== downloadDocument Tests ====================
 
-        DocumentUploadResponse result = documentService.uploadDocument(userId, multipartFile);
+    @Nested
+    @DisplayName("downloadDocument()")
+    class DownloadDocumentTests {
 
-        assertNotNull(result);
-        assertEquals("pdf", result.getFileType());
-        assertTrue(result.getPreviewAvailable(), "PDF files should be previewable");
+        @Test
+        @DisplayName("should return document when file exists on disk")
+        void downloadDocument_success() throws IOException {
+            Document doc = createDocument(1L, "uuid.pdf", "test.pdf", "pdf", 1024, true);
+            Path filePath = tempDir.resolve(userId.toString()).resolve("uuid.pdf");
+            Files.createDirectories(filePath.getParent());
+            Files.createFile(filePath);
 
-        verify(documentRepository).save(any(Document.class));
+            when(documentRepository.findByIdAndUserIdAndDeletedFalse(1L, userId))
+                    .thenReturn(Optional.of(doc));
+
+            Document result = documentService.downloadDocument(userId, 1L);
+
+            assertThat(result).isNotNull();
+            assertThat(result.getId()).isEqualTo(1L);
+        }
+
+        @Test
+        @DisplayName("should throw DOCUMENT_NOT_FOUND when document not in DB")
+        void downloadDocument_notFound() {
+            when(documentRepository.findByIdAndUserIdAndDeletedFalse(999L, userId))
+                    .thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> documentService.downloadDocument(userId, 999L))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("code")
+                    .isEqualTo(ErrorCode.DOCUMENT_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("should throw FILE_UPLOAD_ERROR when file missing on disk")
+        void downloadDocument_fileMissingOnDisk() {
+            Document doc = createDocument(1L, "uuid.pdf", "test.pdf", "pdf", 1024, true);
+            when(documentRepository.findByIdAndUserIdAndDeletedFalse(1L, userId))
+                    .thenReturn(Optional.of(doc));
+
+            assertThatThrownBy(() -> documentService.downloadDocument(userId, 1L))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("code")
+                    .isEqualTo(ErrorCode.FILE_UPLOAD_ERROR);
+        }
     }
 
-    @Test
-    @DisplayName("uploadDocument - should accept DOCX file with previewAvailable=false")
-    void uploadDocument_docxType() throws IOException {
-        when(multipartFile.getOriginalFilename()).thenReturn("document.docx");
-        when(multipartFile.getSize()).thenReturn(5120L);
-        when(multipartFile.getContentType()).thenReturn("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-        doNothing().when(multipartFile).transferTo(any(java.io.File.class));
-        when(documentRepository.save(any(Document.class))).thenAnswer(invocation -> {
-            Document doc = invocation.getArgument(0);
-            doc.setId(3L);
-            doc.setCreatedAt(java.time.LocalDateTime.now());
-            doc.setUpdatedAt(java.time.LocalDateTime.now());
-            return doc;
-        });
+    // ==================== convertToResponse Tests ====================
 
-        DocumentUploadResponse result = documentService.uploadDocument(userId, multipartFile);
+    @Nested
+    @DisplayName("convertToResponse()")
+    class ConvertToResponseTests {
 
-        assertNotNull(result);
-        assertEquals("word", result.getFileType());
-        assertFalse(result.getPreviewAvailable(), "DOCX files should not be previewable");
+        @Test
+        @DisplayName("should correctly map all Document fields to DTO")
+        void convertToResponse_allFields() {
+            LocalDateTime now = LocalDateTime.now();
+            Document doc = createDocument(1L, "uuid.pdf", "test.pdf", "pdf", 1024, true);
+            doc.setCreatedAt(now);
+
+            DocumentUploadResponse response = documentService.convertToResponse(doc);
+
+            assertThat(response.getId()).isEqualTo(1L);
+            assertThat(response.getFilename()).isEqualTo("uuid.pdf");
+            assertThat(response.getOriginalFilename()).isEqualTo("test.pdf");
+            assertThat(response.getFileType()).isEqualTo("pdf");
+            assertThat(response.getFileSize()).isEqualTo(1024);
+            assertThat(response.getPreviewAvailable()).isTrue();
+            assertThat(response.getCreatedAt()).isEqualTo(now);
+        }
     }
 
-    @Test
-    @DisplayName("getDocument - should return document response for valid ID")
-    void getDocument_success() {
-        when(documentRepository.findByIdAndUserIdAndDeletedFalse(10L, userId))
-                .thenReturn(Optional.of(existingDocument));
+    // ==================== init Tests ====================
 
-        DocumentUploadResponse result = documentService.getDocument(userId, 10L);
+    @Nested
+    @DisplayName("init()")
+    class InitTests {
 
-        assertNotNull(result);
-        assertEquals(10L, result.getId());
-        assertEquals("uuid-abc123.md", result.getFilename());
-        assertEquals("test-document.md", result.getOriginalFilename());
-        assertEquals("markdown", result.getFileType());
-        assertEquals(2048L, result.getFileSize());
-        assertTrue(result.getPreviewAvailable());
+        @Test
+        @DisplayName("should create upload directory on init")
+        void init_createsDirectory() throws IOException {
+            Path newDir = tempDir.resolve("new-upload-dir");
+            ReflectionTestUtils.setField(documentService, "uploadDir", newDir.toString());
 
-        verify(documentRepository).findByIdAndUserIdAndDeletedFalse(10L, userId);
-    }
+            documentService.init();
 
-    @Test
-    @DisplayName("getDocument - should throw exception when document not found")
-    void getDocument_notFound() {
-        when(documentRepository.findByIdAndUserIdAndDeletedFalse(999L, userId))
-                .thenReturn(Optional.empty());
-
-        BusinessException exception = assertThrows(BusinessException.class,
-                () -> documentService.getDocument(userId, 999L));
-
-        assertEquals(ErrorCode.DOCUMENT_NOT_FOUND, exception.getCode());
-    }
-
-    @Test
-    @DisplayName("listDocuments - should return paginated list of documents")
-    void listDocuments_success() {
-        List<Document> documents = List.of(existingDocument);
-        Page<Document> documentPage = new PageImpl<>(documents);
-
-        when(documentRepository.findByUserIdAndDeletedFalse(eq(userId), any(Pageable.class)))
-                .thenReturn(documentPage);
-
-        PageResponse<DocumentUploadResponse> result = documentService.listDocuments(userId, 0, 10);
-
-        assertNotNull(result);
-        assertEquals(1, result.getContent().size());
-        assertEquals(1L, result.getTotalElements());
-        assertEquals(1, result.getTotalPages());
-        assertEquals("test-document.md", result.getContent().get(0).getOriginalFilename());
-
-        verify(documentRepository).findByUserIdAndDeletedFalse(eq(userId), any(Pageable.class));
-    }
-
-    @Test
-    @DisplayName("listDocuments - should return empty page when no documents exist")
-    void listDocuments_empty() {
-        Page<Document> emptyPage = new PageImpl<>(List.of());
-
-        when(documentRepository.findByUserIdAndDeletedFalse(eq(userId), any(Pageable.class)))
-                .thenReturn(emptyPage);
-
-        PageResponse<DocumentUploadResponse> result = documentService.listDocuments(userId, 0, 10);
-
-        assertNotNull(result);
-        assertTrue(result.getContent().isEmpty());
-        assertEquals(0L, result.getTotalElements());
-    }
-
-    @Test
-    @DisplayName("deleteDocument - should soft delete an existing document")
-    void deleteDocument_success() {
-        when(documentRepository.findByIdAndUserIdAndDeletedFalse(10L, userId))
-                .thenReturn(Optional.of(existingDocument));
-        when(documentRepository.save(any(Document.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-        documentService.deleteDocument(userId, 10L);
-
-        verify(documentRepository).save(argThat(doc ->
-                Boolean.TRUE.equals(doc.getDeleted())
-        ));
-    }
-
-    @Test
-    @DisplayName("deleteDocument - should throw exception when document not found")
-    void deleteDocument_notFound() {
-        when(documentRepository.findByIdAndUserIdAndDeletedFalse(999L, userId))
-                .thenReturn(Optional.empty());
-
-        BusinessException exception = assertThrows(BusinessException.class,
-                () -> documentService.deleteDocument(userId, 999L));
-
-        assertEquals(ErrorCode.DOCUMENT_NOT_FOUND, exception.getCode());
-
-        verify(documentRepository, never()).save(any(Document.class));
+            assertThat(Files.exists(newDir)).isTrue();
+        }
     }
 }

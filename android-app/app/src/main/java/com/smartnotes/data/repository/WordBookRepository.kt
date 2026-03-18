@@ -1,5 +1,6 @@
 package com.smartnotes.data.repository
 
+import android.util.Log
 import com.smartnotes.data.api.ApiService
 import com.smartnotes.data.api.WordBookRequest
 import com.smartnotes.data.api.WordBookResponse
@@ -24,15 +25,27 @@ class WordBookRepository @Inject constructor(
         return wordBookDao.getAllWordBooks()
     }
 
-    suspend fun refreshWordBooks() {
-        try {
-            val response = apiService.getWordBooks()
-            if (response.isSuccess && response.data != null) {
-                val entities = response.data.map { it.toEntity() }
-                wordBookDao.insertWordBooks(entities)
+    suspend fun refreshWordBooks(page: Int = 0, size: Int = 20): Result<Unit> {
+        return try {
+            var currentPage = page
+            var hasMore = true
+            while (hasMore) {
+                val response = apiService.getWordBooks(page = currentPage, size = size)
+                if (response.isSuccess && response.data != null) {
+                    val pageData = response.data
+                    val entities = pageData.content.map { it.toEntity() }
+                    wordBookDao.insertWordBooks(entities)
+                    hasMore = !pageData.last
+                    currentPage++
+                } else {
+                    Log.w(TAG, "refreshWordBooks: non-success response at page $currentPage: ${response.message}")
+                    break
+                }
             }
-        } catch (_: Exception) {
-            // Silently fail - use local data as fallback
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "refreshWordBooks failed", e)
+            Result.failure(e)
         }
     }
 
@@ -162,8 +175,8 @@ class WordBookRepository @Inject constructor(
 
     // ==================== Words ====================
 
-    suspend fun refreshWords(bookId: Long, localBookId: Long) {
-        try {
+    suspend fun refreshWords(bookId: Long, localBookId: Long): Result<Unit> {
+        return try {
             var page = 0
             var hasMore = true
             while (hasMore) {
@@ -175,13 +188,16 @@ class WordBookRepository @Inject constructor(
                     hasMore = !pageData.last
                     page++
                 } else {
+                    Log.w(TAG, "refreshWords: non-success response at page $page: ${response.message}")
                     break
                 }
             }
             val count = wordDao.getWordCountByBookId(localBookId)
             wordBookDao.updateWordCount(localBookId, count)
-        } catch (_: Exception) {
-            // Silently fail
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "refreshWords failed for bookId=$bookId", e)
+            Result.failure(e)
         }
     }
 
@@ -310,6 +326,10 @@ class WordBookRepository @Inject constructor(
 
     suspend fun getRandomWordsForReview(bookId: Long, limit: Int): List<WordEntity> {
         return wordDao.getRandomWords(bookId, limit)
+    }
+
+    companion object {
+        private const val TAG = "WordBookRepository"
     }
 
     private fun WordBookResponse.toEntity(): WordBookEntity {

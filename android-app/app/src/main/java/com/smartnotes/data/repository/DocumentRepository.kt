@@ -1,5 +1,6 @@
 package com.smartnotes.data.repository
 
+import android.util.Log
 import com.smartnotes.data.api.ApiService
 import com.smartnotes.data.api.DocumentUploadResponse
 import com.smartnotes.data.local.dao.DocumentDao
@@ -23,8 +24,8 @@ class DocumentRepository @Inject constructor(
         return documentDao.getAllDocuments()
     }
 
-    suspend fun refreshDocuments() {
-        try {
+    suspend fun refreshDocuments(): Result<Unit> {
+        return try {
             var page = 0
             var hasMore = true
             while (hasMore) {
@@ -36,11 +37,14 @@ class DocumentRepository @Inject constructor(
                     hasMore = !pageData.last
                     page++
                 } else {
+                    Log.w(TAG, "refreshDocuments: non-success response at page $page: ${response.message}")
                     break
                 }
             }
-        } catch (_: Exception) {
-            // Silently fail - use local data as fallback
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "refreshDocuments failed", e)
+            Result.failure(e)
         }
     }
 
@@ -143,6 +147,10 @@ class DocumentRepository @Inject constructor(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    companion object {
+        private const val TAG = "DocumentRepository"
     }
 
     private fun DocumentUploadResponse.toEntity(localUri: String? = null): DocumentEntity {

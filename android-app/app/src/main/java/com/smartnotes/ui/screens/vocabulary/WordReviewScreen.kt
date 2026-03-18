@@ -1,5 +1,7 @@
 package com.smartnotes.ui.screens.vocabulary
 
+import com.smartnotes.R
+
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -35,12 +37,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -56,8 +60,8 @@ fun WordReviewScreen(
     onNavigateBack: () -> Unit,
     viewModel: WordBookViewModel = hiltViewModel(),
 ) {
-    val reviewSession by viewModel.reviewSession
-    val isOperationLoading by viewModel.isOperationLoading
+    val reviewSession = viewModel.reviewSession.collectAsState().value
+    val isOperationLoading = viewModel.isOperationLoading.collectAsState().value
 
     // Start the review session
     LaunchedEffect(bookId) {
@@ -69,7 +73,7 @@ fun WordReviewScreen(
             androidx.compose.material3.TopAppBar(
                 title = {
                     Text(
-                        text = reviewSession?.bookName ?: "Review",
+                        text = reviewSession?.bookName ?: stringResource(R.string.review),
                         style = MaterialTheme.typography.titleLarge,
                     )
                 },
@@ -82,7 +86,7 @@ fun WordReviewScreen(
         },
     ) { paddingValues ->
         if (isOperationLoading && reviewSession == null) {
-            LoadingIndicator(message = "Preparing review session...")
+            LoadingIndicator(message = stringResource(R.string.preparing_review))
             return@Scaffold
         }
 
@@ -292,7 +296,7 @@ private fun ReviewFlashcard(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Know It",
+                    text = stringResource(R.string.know_it),
                     fontWeight = FontWeight.SemiBold,
                 )
             }
@@ -322,7 +326,7 @@ private fun ReviewResultsSummary(
         verticalArrangement = Arrangement.Center,
     ) {
         Text(
-            text = "Review Complete!",
+            text = stringResource(R.string.review_complete),
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,
@@ -413,7 +417,7 @@ private fun ReviewResultsSummary(
                 .fillMaxWidth()
                 .height(48.dp),
         ) {
-            Text(text = "Done")
+            Text(text = stringResource(R.string.done))
         }
     }
 }

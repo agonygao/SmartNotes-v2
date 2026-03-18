@@ -251,8 +251,33 @@ public class NoteService {
                 .toList();
     }
 
+    /**
+     * Sanitize HTML content to prevent XSS by escaping dangerous characters.
+     */
+    private String sanitizeHtml(String input) {
+        if (input == null) return null;
+        StringBuilder sb = new StringBuilder(input.length());
+        for (int i = 0; i < input.length(); i++) {
+            char c = input.charAt(i);
+            switch (c) {
+                case '&' -> sb.append("&amp;");
+                case '<' -> sb.append("&lt;");
+                case '>' -> sb.append("&gt;");
+                case '"' -> sb.append("&quot;");
+                case '\'' -> sb.append("&#39;");
+                default -> sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
     private NoteResponse convertToResponse(Note note) {
         String content = note.getContent();
+
+        // For non-SECRET notes, sanitize content to prevent XSS
+        if (note.getType() != NoteType.SECRET && content != null) {
+            content = sanitizeHtml(content);
+        }
 
         // Decrypt content for SECRET notes before returning
         if (note.getType() == NoteType.SECRET && Boolean.TRUE.equals(note.getIsEncrypted())

@@ -1,5 +1,7 @@
 package com.smartnotes.ui.screens.auth
 
+import com.smartnotes.R
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +44,7 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -63,7 +67,7 @@ fun LoginScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val focusManager = LocalFocusManager.current
 
-    val loginState by viewModel.loginState
+    val loginState = viewModel.loginState.collectAsState().value
 
     // Handle login success
     LaunchedEffect(loginState) {
@@ -109,8 +113,8 @@ fun LoginScreen(
             OutlinedTextField(
                 value = username,
                 onValueChange = { username = it },
-                label = { Text("Username / Email") },
-                placeholder = { Text("Enter your username or email") },
+                label = { Text(stringResource(R.string.username_or_email)) },
+                placeholder = { Text(stringResource(R.string.enter_username)) },
                 singleLine = true,
                 leadingIcon = {
                     Icon(
@@ -130,8 +134,8 @@ fun LoginScreen(
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
-                label = { Text("Password") },
-                placeholder = { Text("Enter your password") },
+                label = { Text(stringResource(R.string.password)) },
+                placeholder = { Text(stringResource(R.string.enter_password)) },
                 singleLine = true,
                 leadingIcon = {
                     Icon(
@@ -183,7 +187,7 @@ fun LoginScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                 }
-                Text(text = "Login")
+                Text(text = stringResource(R.string.login))
             }
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -200,7 +204,7 @@ fun LoginScreen(
                 )
                 TextButton(onClick = onNavigateToRegister) {
                     Text(
-                        text = "Register",
+                        text = stringResource(R.string.register_link),
                         fontWeight = FontWeight.SemiBold,
                     )
                 }

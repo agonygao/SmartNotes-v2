@@ -8,9 +8,8 @@ import com.smartnotes.dto.SyncPushResponse;
 import com.smartnotes.entity.*;
 import com.smartnotes.exception.BusinessException;
 import com.smartnotes.repository.*;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.TypedQuery;
 import lombok.RequiredArgsConstructor;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -34,7 +33,6 @@ public class SyncService {
     private final WordBookRepository wordBookRepository;
     private final WordRepository wordRepository;
     private final DocumentRepository documentRepository;
-    private final EntityManager entityManager;
 
     private final ObjectMapper objectMapper;
 
@@ -43,6 +41,7 @@ public class SyncService {
 
     // ==================== Push ====================
 
+    @Transactional
     public SyncPushResponse push(Long userId, List<SyncPushRequest> changes) {
         if (changes == null || changes.isEmpty()) {
             return SyncPushResponse.builder().results(Collections.emptyList()).build();
@@ -73,10 +72,20 @@ public class SyncService {
             }
         }
 
-        // Update cursor
+        // Update cursor with optimistic locking via @Version
         syncCursor.setCursor(currentMaxCursor);
         syncCursor.setLastSyncedAt(LocalDateTime.now());
-        syncCursorRepository.save(syncCursor);
+        try {
+            syncCursorRepository.saveAndFlush(syncCursor);
+        } catch (ObjectOptimisticLockingFailureException e) {
+            log.warn("Concurrent sync cursor update detected for userId={}, retrying", userId);
+            syncCursor = getOrCreateCursor(userId);
+            if (currentMaxCursor > syncCursor.getCursor()) {
+                syncCursor.setCursor(currentMaxCursor);
+                syncCursor.setLastSyncedAt(LocalDateTime.now());
+                syncCursorRepository.saveAndFlush(syncCursor);
+            }
+        }
 
         return SyncPushResponse.builder().results(results).build();
     }
@@ -130,7 +139,7 @@ public class SyncService {
     private SyncPushResponse.SyncResultEntry processCreate(Long userId, SyncPushRequest change,
                                                           String entityType, long newCursor) {
         // Check if entity already exists by clientId
-        Optional<? extends BaseEntity> existing = findEntityByClientId(entityType, change.getClientId());
+        Optional<? extends BaseEntity> existing = findEntityByClientId(entityType, change.getClientId(), userId);
 
         if (existing.isPresent()) {
             // Entity already exists - conflict
@@ -143,18 +152,26 @@ public class SyncService {
                     .build();
         }
 
-        // Placeholder: the actual entity creation is done via normal CRUD.
-        // We log the sync entry with entityId 0 (not yet assigned) or the provided entityId.
-        // Use the provided entityId from the client as a provisional ID; the real entity
-        // will be created via normal CRUD endpoints and associated later.
-        SyncLog syncLog = buildSyncLog(userId, entityType, change.getEntityId() != null ? change.getEntityId() : 0L,
+        // Create the actual entity from the sync data
+        BaseEntity createdEntity = createEntityFromData(userId, entityType, change);
+        if (createdEntity == null) {
+            log.warn("Failed to create entity from sync data: entityType={}, clientId={}", entityType, change.getClientId());
+            return SyncPushResponse.SyncResultEntry.builder()
+                    .entityType(entityType)
+                    .clientId(change.getClientId())
+                    .entityId(change.getEntityId())
+                    .status("ERROR")
+                    .build();
+        }
+
+        SyncLog syncLog = buildSyncLog(userId, entityType, createdEntity.getId(),
                 SyncAction.CREATE, newCursor, change.getClientId());
         syncLogRepository.save(syncLog);
 
         return SyncPushResponse.SyncResultEntry.builder()
                 .entityType(entityType)
                 .clientId(change.getClientId())
-                .entityId(change.getEntityId())
+                .entityId(createdEntity.getId())
                 .serverVersion((int) newCursor)
                 .status("ACCEPTED")
                 .build();
@@ -171,7 +188,7 @@ public class SyncService {
                     .build();
         }
 
-        Optional<? extends BaseEntity> entityOpt = findEntityById(entityType, change.getEntityId());
+        Optional<? extends BaseEntity> entityOpt = findEntityById(entityType, change.getEntityId(), userId);
 
         if (entityOpt.isEmpty()) {
             return SyncPushResponse.SyncResultEntry.builder()
@@ -239,7 +256,7 @@ public class SyncService {
                     .build();
         }
 
-        Optional<? extends BaseEntity> entityOpt = findEntityById(entityType, change.getEntityId());
+        Optional<? extends BaseEntity> entityOpt = findEntityById(entityType, change.getEntityId(), userId);
 
         if (entityOpt.isEmpty()) {
             // Entity not found - already deleted or never existed, just log it
@@ -296,7 +313,7 @@ public class SyncService {
         List<SyncLog> logs = hasMore ? allLogs.subList(0, pageSize) : allLogs;
 
         List<SyncPullResponse.SyncChangeEntry> changes = logs.stream()
-                .map(log -> buildChangeEntry(log))
+                .map(log -> buildChangeEntry(log, userId))
                 .collect(Collectors.toList());
 
         // Determine the new cursor value (last processed cursor)
@@ -312,13 +329,13 @@ public class SyncService {
                 .build();
     }
 
-    private SyncPullResponse.SyncChangeEntry buildChangeEntry(SyncLog log) {
+    private SyncPullResponse.SyncChangeEntry buildChangeEntry(SyncLog log, Long userId) {
         String data = null;
         Integer version = null;
 
         // For non-DELETE actions, fetch the actual entity data
         if (log.getAction() != SyncAction.DELETE) {
-            Optional<? extends BaseEntity> entityOpt = findEntityById(log.getEntityType(), log.getEntityId());
+            Optional<? extends BaseEntity> entityOpt = findEntityById(log.getEntityType(), log.getEntityId(), userId);
             if (entityOpt.isPresent()) {
                 BaseEntity entity = entityOpt.get();
                 if (!Boolean.TRUE.equals(entity.getDeleted())) {
@@ -350,8 +367,8 @@ public class SyncService {
         SyncCursor syncCursor = getOrCreateCursor(userId);
 
         // Count pending changes (logs with cursor > user's cursor)
-        long pendingChanges = syncLogRepository.findByUserIdAndSyncCursorGreaterThanOrderBySyncCursorAsc(
-                userId, syncCursor.getCursor()).size();
+        long pendingChanges = syncLogRepository.countByUserIdAndSyncCursorGreaterThan(
+                userId, syncCursor.getCursor());
 
         Map<String, Object> status = new LinkedHashMap<>();
         status.put("cursor", syncCursor.getCursor());
@@ -417,7 +434,7 @@ public class SyncService {
                 // Apply local data to the entity if the entity still exists
                 String dataToApply = (resolvedData != null && !resolvedData.isBlank())
                         ? resolvedData : conflict.getLocalData();
-                applyDataToEntity(conflict.getEntityType(), conflict.getEntityId(), dataToApply);
+                applyDataToEntity(conflict.getEntityType(), conflict.getEntityId(), dataToApply, userId);
                 resolvedAction = "LOCAL_WINS";
             }
             case "SERVER_WINS" -> {
@@ -442,13 +459,13 @@ public class SyncService {
     /**
      * Apply resolved data to the entity by deserializing JSON and updating fields.
      */
-    private void applyDataToEntity(String entityType, Long entityId, String jsonData) {
+    private void applyDataToEntity(String entityType, Long entityId, String jsonData, Long userId) {
         if (jsonData == null || jsonData.isBlank()) {
             log.warn("No data to apply for entity type={}, id={}", entityType, entityId);
             return;
         }
 
-        Optional<? extends BaseEntity> entityOpt = findEntityById(entityType, entityId);
+        Optional<? extends BaseEntity> entityOpt = findEntityById(entityType, entityId, userId);
         if (entityOpt.isEmpty()) {
             log.warn("Entity not found for data application: type={}, id={}", entityType, entityId);
             return;
@@ -478,6 +495,10 @@ public class SyncService {
         } catch (Exception e) {
             log.error("Failed to apply data to entity: type={}, id={}, error={}",
                     entityType, entityId, e.getMessage(), e);
+            throw new BusinessException(
+                    com.smartnotes.dto.ErrorCode.INTERNAL_ERROR,
+                    "Failed to apply resolved data to entity: " + entityType + "#" + entityId
+            );
         }
     }
 
@@ -546,44 +567,28 @@ public class SyncService {
     }
 
     @SuppressWarnings("unchecked")
-    private Optional<? extends BaseEntity> findEntityById(String entityType, Long entityId) {
+    private Optional<? extends BaseEntity> findEntityById(String entityType, Long entityId, Long userId) {
         return switch (entityType) {
-            case "NOTE" -> noteRepository.findById(entityId).map(e -> (BaseEntity) e);
-            case "WORD_BOOK" -> wordBookRepository.findById(entityId).map(e -> (BaseEntity) e);
-            case "WORD" -> wordRepository.findById(entityId).map(e -> (BaseEntity) e);
-            case "DOCUMENT" -> documentRepository.findById(entityId).map(e -> (BaseEntity) e);
+            case "NOTE" -> noteRepository.findByIdAndUserIdAndDeletedFalse(entityId, userId).map(e -> (BaseEntity) e);
+            case "WORD_BOOK" -> wordBookRepository.findByIdAndUserIdAndDeletedFalse(entityId, userId).map(e -> (BaseEntity) e);
+            case "WORD" -> wordRepository.findByIdAndUserIdAndDeletedFalse(entityId, userId).map(e -> (BaseEntity) e);
+            case "DOCUMENT" -> documentRepository.findByIdAndUserIdAndDeletedFalse(entityId, userId).map(e -> (BaseEntity) e);
             default -> Optional.empty();
         };
     }
 
-    private Optional<? extends BaseEntity> findEntityByClientId(String entityType, String clientId) {
+    @SuppressWarnings("unchecked")
+    private Optional<? extends BaseEntity> findEntityByClientId(String entityType, String clientId, Long userId) {
         if (clientId == null || clientId.isBlank()) {
             return Optional.empty();
         }
-        // Use EntityManager JPQL to look up entity by clientId across all entity types.
-        // All entities extend BaseEntity which has the clientId field.
-        String entityClassName = switch (entityType) {
-            case "NOTE" -> Note.class.getName();
-            case "WORD_BOOK" -> WordBook.class.getName();
-            case "WORD" -> Word.class.getName();
-            case "DOCUMENT" -> Document.class.getName();
-            default -> null;
+        return switch (entityType) {
+            case "NOTE" -> noteRepository.findByClientIdAndUserIdAndDeletedFalse(clientId, userId).map(e -> (BaseEntity) e);
+            case "WORD_BOOK" -> wordBookRepository.findByClientIdAndUserIdAndDeletedFalse(clientId, userId).map(e -> (BaseEntity) e);
+            case "WORD" -> wordRepository.findByClientIdAndUserIdAndDeletedFalse(clientId, userId).map(e -> (BaseEntity) e);
+            case "DOCUMENT" -> documentRepository.findByClientIdAndUserIdAndDeletedFalse(clientId, userId).map(e -> (BaseEntity) e);
+            default -> Optional.empty();
         };
-        if (entityClassName == null) {
-            return Optional.empty();
-        }
-        try {
-            String jpql = "SELECT e FROM " + entityClassName + " e WHERE e.clientId = :clientId AND e.deleted = false";
-            TypedQuery<? extends BaseEntity> query = entityManager.createQuery(jpql, BaseEntity.class);
-            query.setParameter("clientId", clientId);
-            query.setMaxResults(1);
-            List<? extends BaseEntity> results = query.getResultList();
-            return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
-        } catch (Exception e) {
-            log.warn("Failed to look up entity by clientId: entityType={}, clientId={}, error={}",
-                    entityType, clientId, e.getMessage());
-            return Optional.empty();
-        }
     }
 
     private void saveEntity(String entityType, BaseEntity entity) {
@@ -601,6 +606,71 @@ public class SyncService {
         } catch (Exception e) {
             log.warn("Failed to serialize entity to JSON: entityType={}, entityId={}, error={}",
                     entity.getClass().getSimpleName(), entity.getId(), e.getMessage());
+            return null;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private BaseEntity createEntityFromData(Long userId, String entityType, SyncPushRequest change) {
+        try {
+            Map<String, Object> data = change.getData() != null && !change.getData().isBlank()
+                    ? objectMapper.readValue(change.getData(), Map.class)
+                    : new java.util.HashMap<>();
+
+            return switch (entityType) {
+                case "NOTE" -> {
+                    Note note = new Note();
+                    note.setUserId(userId);
+                    note.setTitle(data.containsKey("title") ? (String) data.get("title") : "");
+                    note.setContent((String) data.get("content"));
+                    if (data.containsKey("type") && data.get("type") != null) {
+                        try { note.setType(NoteType.valueOf((String) data.get("type"))); } catch (Exception ignored) {}
+                    }
+                    note.setChecklistItems((String) data.get("checklistItems"));
+                    if (data.containsKey("isPinned") && data.get("isPinned") != null)
+                        note.setIsPinned((Boolean) data.get("isPinned"));
+                    if (data.containsKey("isCompleted") && data.get("isCompleted") != null)
+                        note.setIsCompleted((Boolean) data.get("isCompleted"));
+                    if (data.containsKey("isEncrypted") && data.get("isEncrypted") != null)
+                        note.setIsEncrypted((Boolean) data.get("isEncrypted"));
+                    note.setClientId(change.getClientId());
+                    note.setVersion(1);
+                    yield noteRepository.save(note);
+                }
+                case "WORD_BOOK" -> {
+                    WordBook wb = new WordBook();
+                    wb.setUserId(userId);
+                    wb.setName(data.containsKey("name") ? (String) data.get("name") : "");
+                    wb.setDescription((String) data.get("description"));
+                    wb.setClientId(change.getClientId());
+                    wb.setVersion(1);
+                    yield wordBookRepository.save(wb);
+                }
+                case "WORD" -> {
+                    Word word = new Word();
+                    // bookId must be provided for word creation
+                    if (change.getEntityId() != null) {
+                        word.setBookId(change.getEntityId());
+                    }
+                    word.setWord((String) data.get("word"));
+                    word.setMeaning((String) data.get("meaning"));
+                    word.setPhonetic((String) data.get("phonetic"));
+                    word.setExampleSentence((String) data.get("exampleSentence"));
+                    if (data.containsKey("sortOrder") && data.get("sortOrder") != null)
+                        word.setSortOrder(((Number) data.get("sortOrder")).intValue());
+                    word.setClientId(change.getClientId());
+                    word.setVersion(1);
+                    yield wordRepository.save(word);
+                }
+                case "DOCUMENT" -> {
+                    // Documents require file upload, cannot be created from sync data alone
+                    log.warn("Cannot create document from sync data; documents require file upload");
+                    yield null;
+                }
+                default -> null;
+            };
+        } catch (Exception e) {
+            log.error("Failed to create entity from sync data: entityType={}, error={}", entityType, e.getMessage(), e);
             return null;
         }
     }

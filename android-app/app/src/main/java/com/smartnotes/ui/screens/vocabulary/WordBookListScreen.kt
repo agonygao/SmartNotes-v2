@@ -1,5 +1,7 @@
 package com.smartnotes.ui.screens.vocabulary
 
+import com.smartnotes.R
+
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -38,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,13 +51,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.smartnotes.ui.components.EmptyState
 import com.smartnotes.ui.components.ErrorMessage
 import com.smartnotes.ui.components.LoadingIndicator
+import com.smartnotes.ui.components.NetworkError
 import com.smartnotes.ui.components.SmartNotesTopAppBar
+import com.smartnotes.ui.components.SyncStatusChip
 import com.smartnotes.ui.viewmodel.WordBook
 import com.smartnotes.ui.viewmodel.WordBookType
 import com.smartnotes.ui.viewmodel.WordBookViewModel
@@ -65,23 +71,34 @@ fun WordBookListScreen(
     onNavigateToWordBookDetail: (bookId: Long) -> Unit,
     viewModel: WordBookViewModel = hiltViewModel(),
 ) {
-    val wordBooksState by viewModel.wordBooksState
-    val isOperationLoading by viewModel.isOperationLoading
-    val operationError by viewModel.operationError
+    val wordBooksState = viewModel.wordBooksState.collectAsState().value
+    val isOperationLoading = viewModel.isOperationLoading.collectAsState().value
+    val operationError = viewModel.operationError.collectAsState().value
+    val syncStatus = viewModel.syncStatus.collectAsState().value
     val snackbarHostState = remember { SnackbarHostState() }
     var showCreateDialog by remember { mutableStateOf(false) }
 
     // Show operation errors
     LaunchedEffect(operationError) {
         if (operationError != null) {
-            snackbarHostState.showSnackbar(operationError!!)
+            snackbarHostState.showSnackbar(message = operationError!!)
             viewModel.clearOperationError()
         }
     }
 
     Scaffold(
         topBar = {
-            SmartNotesTopAppBar(title = "Word Books")
+            SmartNotesTopAppBar(
+                title = stringResource(R.string.word_books),
+                actions = {
+                    if (syncStatus != com.smartnotes.data.api.SyncStatus.SYNCED) {
+                        SyncStatusChip(
+                            status = syncStatus,
+                            modifier = Modifier.padding(end = 4.dp),
+                        )
+                    }
+                },
+            )
         },
         floatingActionButton = {
             FloatingActionButton(
@@ -90,7 +107,7 @@ fun WordBookListScreen(
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
-                    contentDescription = "Create new word book",
+                    contentDescription = stringResource(R.string.create_word_book),
                 )
             }
         },
@@ -98,11 +115,11 @@ fun WordBookListScreen(
     ) { paddingValues ->
         when (wordBooksState) {
             is WordBooksUiState.Loading -> {
-                LoadingIndicator(message = "Loading word books...")
+                LoadingIndicator(message = stringResource(R.string.loading_word_books))
             }
 
             is WordBooksUiState.Error -> {
-                ErrorMessage(
+                NetworkError(
                     message = (wordBooksState as WordBooksUiState.Error).message,
                     onRetry = { viewModel.loadWordBooks() },
                 )
@@ -112,9 +129,10 @@ fun WordBookListScreen(
                 val wordBooks = (wordBooksState as WordBooksUiState.Success).wordBooks
                 if (wordBooks.isEmpty()) {
                     EmptyState(
-                        message = "No word books yet. Tap + to create one!",
-                        icon = Icons.Default.Book,
-                        actionLabel = "Create Word Book",
+                        message = stringResource(R.string.empty_wordbooks_title),
+                        subtitle = stringResource(R.string.empty_wordbooks_message),
+                        icon = Icons.Default.AutoStories,
+                        actionLabel = stringResource(R.string.create_word_book),
                         onAction = { showCreateDialog = true },
                     )
                 } else {
@@ -137,7 +155,7 @@ fun WordBookListScreen(
                         if (defaultBooks.isNotEmpty()) {
                             item {
                                 Text(
-                                    text = "Default Books",
+                                    text = stringResource(R.string.default_books),
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(vertical = 8.dp),
@@ -154,7 +172,7 @@ fun WordBookListScreen(
                         if (customBooks.isNotEmpty()) {
                             item {
                                 Text(
-                                    text = "My Books",
+                                    text = stringResource(R.string.my_books),
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(vertical = 8.dp),
@@ -288,7 +306,7 @@ private fun CreateWordBookDialog(
         onDismissRequest = { if (!isLoading) onDismiss() },
         title = {
             Text(
-                text = "Create Word Book",
+                text = stringResource(R.string.create_word_book),
                 style = MaterialTheme.typography.titleMedium,
             )
         },
@@ -299,8 +317,8 @@ private fun CreateWordBookDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Name") },
-                    placeholder = { Text("Enter word book name") },
+                    label = { Text(stringResource(R.string.name)) },
+                    placeholder = { Text(stringResource(R.string.enter_name)) },
                     singleLine = true,
                     enabled = !isLoading,
                     modifier = Modifier.fillMaxWidth(),
@@ -308,8 +326,8 @@ private fun CreateWordBookDialog(
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
-                    label = { Text("Description (optional)") },
-                    placeholder = { Text("Brief description") },
+                    label = { Text(stringResource(R.string.description_optional)) },
+                    placeholder = { Text(stringResource(R.string.brief_description)) },
                     singleLine = true,
                     enabled = !isLoading,
                     modifier = Modifier.fillMaxWidth(),
@@ -321,12 +339,12 @@ private fun CreateWordBookDialog(
                 onClick = { onConfirm(name.trim(), description.trim().ifBlank { null }) },
                 enabled = !isLoading && name.isNotBlank(),
             ) {
-                Text("Create")
+                Text(stringResource(R.string.create))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss, enabled = !isLoading) {
-                Text("Cancel")
+                Text(stringResource(R.string.cancel))
             }
         },
     )

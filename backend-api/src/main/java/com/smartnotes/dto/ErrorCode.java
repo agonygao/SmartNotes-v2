@@ -13,6 +13,7 @@ public enum ErrorCode {
     UNAUTHORIZED(401, "未认证"),
     FORBIDDEN(403, "无权限"),
     NOT_FOUND(404, "资源不存在"),
+    METHOD_NOT_ALLOWED(405, "请求方法不允许"),
     CONFLICT(409, "数据冲突"),
     INTERNAL_ERROR(500, "服务器内部错误"),
 
@@ -40,7 +41,10 @@ public enum ErrorCode {
 
     // Sync
     SYNC_CONFLICT(5001, "同步冲突"),
-    SYNC_CURSOR_INVALID(5002, "同步游标无效");
+    SYNC_CURSOR_INVALID(5002, "同步游标无效"),
+    SYNC_DISABLED(5003, "同步功能已禁用"),
+    SYNC_RATE_LIMITED(5004, "同步请求过于频繁"),
+    SYNC_ENTITY_NOT_FOUND(5005, "同步实体不存在");
 
     private final int code;
     private final String message;

@@ -1,5 +1,7 @@
 package com.smartnotes.ui.screens.settings
 
+import android.content.Intent
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,16 +16,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.SyncProblem
 import androidx.compose.material.icons.filled.ToggleOn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -46,6 +49,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,9 +58,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.smartnotes.MainActivity
+import com.smartnotes.R
+import com.smartnotes.core.LocaleHelper
 import com.smartnotes.ui.components.NavigationBackButton
 import com.smartnotes.ui.viewmodel.SettingsState
 import com.smartnotes.ui.viewmodel.SettingsViewModel
@@ -69,16 +78,23 @@ fun SettingsScreen(
     onLogout: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
-    val settingsState by viewModel.settingsState
+    val settingsState = viewModel.settingsState.collectAsState().value
     val snackbarHostState = remember { SnackbarHostState() }
     var showLogoutConfirm by remember { mutableStateOf(false) }
     var showClearCacheConfirm by remember { mutableStateOf(false) }
     var showThemeSelector by remember { mutableStateOf(false) }
+    var showLanguageSelector by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val activity = context as? ComponentActivity
 
     // Show messages
     LaunchedEffect(settingsState.message) {
-        settingsState.message?.let { message ->
-            snackbarHostState.showSnackbar(message)
+        val message = settingsState.message
+        if (message != null) {
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = androidx.compose.material3.SnackbarDuration.Short
+            )
             viewModel.clearMessage()
         }
     }
@@ -88,7 +104,7 @@ fun SettingsScreen(
             androidx.compose.material3.TopAppBar(
                 title = {
                     Text(
-                        text = "Settings",
+                        text = stringResource(R.string.settings),
                         style = MaterialTheme.typography.titleLarge,
                     )
                 },
@@ -107,10 +123,8 @@ fun SettingsScreen(
                 .padding(paddingValues)
                 .verticalScroll(rememberScrollState()),
         ) {
-            // ---------------------------------------------------------------
-            // Server Configuration Section
-            // ---------------------------------------------------------------
-            SettingsSectionHeader(title = "Server Configuration")
+            // Server Configuration
+            SettingsSectionHeader(title = stringResource(R.string.server_config))
 
             Card(
                 modifier = Modifier
@@ -127,7 +141,7 @@ fun SettingsScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(
-                        text = "Backend URL",
+                        text = stringResource(R.string.backend_url),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -135,16 +149,9 @@ fun SettingsScreen(
                     OutlinedTextField(
                         value = settingsState.backendUrl,
                         onValueChange = { viewModel.updateBackendUrl(it) },
-                        placeholder = { Text("https://your-server.com") },
+                        placeholder = { Text(stringResource(R.string.backend_url_placeholder)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Link,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        },
                     )
 
                     Button(
@@ -166,17 +173,15 @@ fun SettingsScreen(
                             modifier = Modifier.size(18.dp),
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Save URL")
+                        Text(stringResource(R.string.save_url))
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ---------------------------------------------------------------
-            // Sync Section
-            // ---------------------------------------------------------------
-            SettingsSectionHeader(title = "Sync")
+            // Sync
+            SettingsSectionHeader(title = stringResource(R.string.sync))
 
             Card(
                 modifier = Modifier
@@ -187,39 +192,58 @@ fun SettingsScreen(
                 ),
             ) {
                 Column {
-                    // Auto-sync toggle
                     SettingsToggleItem(
                         icon = Icons.Default.ToggleOn,
-                        title = "Auto Sync",
-                        subtitle = "Automatically sync data with server",
+                        title = stringResource(R.string.auto_sync),
+                        subtitle = stringResource(R.string.auto_sync_desc),
                         checked = settingsState.autoSync,
                         onCheckedChange = { viewModel.toggleAutoSync(it) },
                     )
 
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
 
-                    // Sync now
                     SettingsClickableItem(
-                        icon = Icons.Default.Sync,
-                        title = "Sync Now",
-                        subtitle = settingsState.lastSyncTime ?: "Never synced",
-                        onClick = {
-                            viewModel.updateLastSyncTime(
-                                java.time.LocalDateTime.now().format(
-                                    java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-                                )
-                            )
+                        icon = if (settingsState.syncError != null) Icons.Default.SyncProblem else Icons.Default.Sync,
+                        title = stringResource(R.string.sync_now),
+                        subtitle = when {
+                            settingsState.isSyncing -> stringResource(R.string.sync_status_syncing)
+                            settingsState.syncError != null -> settingsState.syncError
+                            else -> settingsState.lastSyncTime ?: stringResource(R.string.never_synced)
                         },
+                        titleColor = if (settingsState.syncError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                        onClick = { viewModel.syncNow { /* sync logic provided by caller */ Result.success(Unit) } },
                     )
+
+                    // Sync error with retry button
+                    if (settingsState.syncError != null) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            TextButton(
+                                onClick = { viewModel.syncNow { Result.success(Unit) } },
+                                enabled = !settingsState.isSyncing,
+                            ) {
+                                if (settingsState.isSyncing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                }
+                                Text(stringResource(R.string.retry))
+                            }
+                        }
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ---------------------------------------------------------------
-            // Appearance Section
-            // ---------------------------------------------------------------
-            SettingsSectionHeader(title = "Appearance")
+            // Appearance
+            SettingsSectionHeader(title = stringResource(R.string.appearance))
 
             Card(
                 modifier = Modifier
@@ -229,20 +253,29 @@ fun SettingsScreen(
                     containerColor = MaterialTheme.colorScheme.surface,
                 ),
             ) {
-                SettingsClickableItem(
-                    icon = Icons.Default.Palette,
-                    title = "Theme",
-                    subtitle = "Current: ${settingsState.themeMode.label}",
-                    onClick = { showThemeSelector = true },
-                )
+                Column {
+                    SettingsClickableItem(
+                        icon = Icons.Default.Palette,
+                        title = stringResource(R.string.theme),
+                        subtitle = stringResource(R.string.current_theme, settingsState.themeMode.label),
+                        onClick = { showThemeSelector = true },
+                    )
+
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                    SettingsClickableItem(
+                        icon = Icons.Default.Language,
+                        title = stringResource(R.string.language),
+                        subtitle = stringResource(R.string.current_language, LocaleHelper.getLanguageLabel(settingsState.language)),
+                        onClick = { showLanguageSelector = true },
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ---------------------------------------------------------------
-            // About Section
-            // ---------------------------------------------------------------
-            SettingsSectionHeader(title = "About")
+            // About
+            SettingsSectionHeader(title = stringResource(R.string.about))
 
             Card(
                 modifier = Modifier
@@ -254,18 +287,16 @@ fun SettingsScreen(
             ) {
                 SettingsClickableItem(
                     icon = Icons.Default.Info,
-                    title = "App Version",
+                    title = stringResource(R.string.app_version_label),
                     subtitle = settingsState.appVersion,
-                    onClick = { /* No action */ },
+                    onClick = { },
                 )
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ---------------------------------------------------------------
-            // Danger Zone
-            // ---------------------------------------------------------------
-            SettingsSectionHeader(title = "Account")
+            // Account
+            SettingsSectionHeader(title = stringResource(R.string.account))
 
             Card(
                 modifier = Modifier
@@ -278,8 +309,8 @@ fun SettingsScreen(
                 Column {
                     SettingsClickableItem(
                         icon = Icons.Default.DeleteSweep,
-                        title = "Clear Cache",
-                        subtitle = "Clear local cached data",
+                        title = stringResource(R.string.clear_cache),
+                        subtitle = stringResource(R.string.clear_cache_desc),
                         onClick = { showClearCacheConfirm = true },
                     )
 
@@ -287,8 +318,8 @@ fun SettingsScreen(
 
                     SettingsClickableItem(
                         icon = Icons.Default.ExitToApp,
-                        title = "Logout",
-                        subtitle = "Sign out of your account",
+                        title = stringResource(R.string.logout),
+                        subtitle = stringResource(R.string.logout_desc),
                         titleColor = MaterialTheme.colorScheme.error,
                         onClick = { showLogoutConfirm = true },
                     )
@@ -298,12 +329,12 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(32.dp))
         }
 
-        // Logout confirmation dialog
+        // Logout dialog
         if (showLogoutConfirm) {
             AlertDialog(
                 onDismissRequest = { showLogoutConfirm = false },
-                title = { Text("Logout") },
-                text = { Text("Are you sure you want to logout?") },
+                title = { Text(stringResource(R.string.logout)) },
+                text = { Text(stringResource(R.string.logout_confirm)) },
                 confirmButton = {
                     TextButton(onClick = {
                         showLogoutConfirm = false
@@ -311,34 +342,34 @@ fun SettingsScreen(
                             onLogout()
                         }
                     }) {
-                        Text("Logout", color = MaterialTheme.colorScheme.error)
+                        Text(stringResource(R.string.logout), color = MaterialTheme.colorScheme.error)
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showLogoutConfirm = false }) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.cancel))
                     }
                 },
             )
         }
 
-        // Clear cache confirmation dialog
+        // Clear cache dialog
         if (showClearCacheConfirm) {
             AlertDialog(
                 onDismissRequest = { showClearCacheConfirm = false },
-                title = { Text("Clear Cache") },
-                text = { Text("Are you sure you want to clear all cached data? This may require re-downloading some content.") },
+                title = { Text(stringResource(R.string.clear_cache)) },
+                text = { Text(stringResource(R.string.clear_cache_confirm)) },
                 confirmButton = {
                     TextButton(onClick = {
                         showClearCacheConfirm = false
                         viewModel.clearCache { }
                     }) {
-                        Text("Clear", color = MaterialTheme.colorScheme.error)
+                        Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showClearCacheConfirm = false }) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.cancel))
                     }
                 },
             )
@@ -348,7 +379,7 @@ fun SettingsScreen(
         if (showThemeSelector) {
             AlertDialog(
                 onDismissRequest = { showThemeSelector = false },
-                title = { Text("Select Theme") },
+                title = { Text(stringResource(R.string.select_theme)) },
                 text = {
                     Column {
                         ThemeMode.entries.forEach { mode ->
@@ -382,7 +413,56 @@ fun SettingsScreen(
                 },
                 confirmButton = {
                     TextButton(onClick = { showThemeSelector = false }) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.cancel))
+                    }
+                },
+            )
+        }
+
+        // Language selector dialog
+        if (showLanguageSelector) {
+            AlertDialog(
+                onDismissRequest = { showLanguageSelector = false },
+                title = { Text(stringResource(R.string.select_language)) },
+                text = {
+                    Column {
+                        LocaleHelper.supportedLanguages.forEach { lang ->
+                            val label = LocaleHelper.getLanguageLabel(lang)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        LocaleHelper.saveLocale(context, lang)
+                                        viewModel.setLanguage(lang)
+                                        showLanguageSelector = false
+                                        activity?.recreate()
+                                    }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = settingsState.language == lang,
+                                    onClick = {
+                                        LocaleHelper.saveLocale(context, lang)
+                                        viewModel.setLanguage(lang)
+                                        showLanguageSelector = false
+                                        activity?.recreate()
+                                    },
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showLanguageSelector = false }) {
+                        Text(stringResource(R.string.cancel))
                     }
                 },
             )

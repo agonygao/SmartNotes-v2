@@ -14,5 +14,7 @@ public interface SyncLogRepository extends JpaRepository<SyncLog, Long> {
 
     List<SyncLog> findByUserIdAndSyncCursorGreaterThan(Long userId, Long cursor, Pageable pageable);
 
+    long countByUserIdAndSyncCursorGreaterThan(Long userId, Long cursor);
+
     void deleteByUserIdAndSyncCursorLessThan(Long userId, Long cursor);
 }

@@ -2,6 +2,7 @@ package com.smartnotes.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.smartnotes.data.api.SyncStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -61,7 +62,7 @@ enum class WordBookType(val label: String) {
 // ---------------------------------------------------------------------------
 sealed class WordBooksUiState {
     data object Loading : WordBooksUiState()
-    data class Success(val wordBooks: List<WordBook>) : WordBooksUiState()
+    data class Success(val wordBooks: List<WordBook>, val hasMore: Boolean = false) : WordBooksUiState()
     data class Error(val message: String) : WordBooksUiState()
 }
 
@@ -117,7 +118,7 @@ data class DictationResult(
 // Repository interface
 // ---------------------------------------------------------------------------
 interface WordBookRepository {
-    suspend fun getWordBooks(): Result<List<WordBook>>
+    suspend fun getWordBooks(page: Int = 0, size: Int = 20): Result<List<WordBook>>
     suspend fun getWordBookById(id: Long): Result<WordBook>
     suspend fun createWordBook(name: String, description: String?): Result<WordBook>
     suspend fun updateWordBook(id: Long, name: String, description: String?): Result<WordBook>
@@ -160,6 +161,13 @@ class WordBookViewModel @Inject constructor(
     private val _operationError = MutableStateFlow<String?>(null)
     val operationError: StateFlow<String?> = _operationError.asStateFlow()
 
+    private val _syncStatus = MutableStateFlow(SyncStatus.SYNCED)
+    val syncStatus: StateFlow<SyncStatus> = _syncStatus.asStateFlow()
+
+    private var _currentPage = 0
+    private var _hasMoreBooks = false
+    private val _pageSize = 20
+
     init {
         loadWordBooks()
     }
@@ -171,12 +179,35 @@ class WordBookViewModel @Inject constructor(
     fun loadWordBooks() {
         viewModelScope.launch {
             _wordBooksState.value = WordBooksUiState.Loading
-            val result = wordBookRepository.getWordBooks()
+            _syncStatus.value = SyncStatus.SYNCING
+            _currentPage = 0
+            val result = wordBookRepository.getWordBooks(page = _currentPage, size = _pageSize)
             if (result.isSuccess) {
-                _wordBooksState.value = WordBooksUiState.Success(result.getOrNull()!!)
+                val books = result.getOrNull()!!
+                _hasMoreBooks = books.size >= _pageSize
+                _wordBooksState.value = WordBooksUiState.Success(books, _hasMoreBooks)
+                _syncStatus.value = SyncStatus.SYNCED
             } else {
+                _syncStatus.value = SyncStatus.ERROR
                 _wordBooksState.value = WordBooksUiState.Error(
                     result.exceptionOrNull()?.message ?: "Failed to load word books"
+                )
+            }
+        }
+    }
+
+    fun loadMoreWordBooks() {
+        if (!_hasMoreBooks) return
+        val currentState = _wordBooksState.value
+        if (currentState !is WordBooksUiState.Success) return
+        viewModelScope.launch {
+            _currentPage++
+            val result = wordBookRepository.getWordBooks(page = _currentPage, size = _pageSize)
+            if (result.isSuccess) {
+                val newBooks = result.getOrNull()!!
+                _hasMoreBooks = newBooks.size >= _pageSize
+                _wordBooksState.value = WordBooksUiState.Success(
+                    currentState.wordBooks + newBooks, _hasMoreBooks
                 )
             }
         }

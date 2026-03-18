@@ -8,6 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -33,6 +34,10 @@ public class SyncCursor {
 
     @Column(name = "last_synced_at")
     private LocalDateTime lastSyncedAt;
+
+    @Version
+    @Column(name = "version")
+    private Long version;
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;

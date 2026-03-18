@@ -18,4 +18,6 @@ public interface WordBookRepository extends JpaRepository<WordBook, Long> {
     Optional<WordBook> findByTypeAndIsDefaultTrue(WordBookType type);
 
     boolean existsByTypeAndIsDefaultTrue(WordBookType type);
+
+    Optional<WordBook> findByClientIdAndUserIdAndDeletedFalse(String clientId, Long userId);
 }

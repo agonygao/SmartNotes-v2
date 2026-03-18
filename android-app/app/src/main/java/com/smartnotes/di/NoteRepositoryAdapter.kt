@@ -2,6 +2,7 @@ package com.smartnotes.di
 
 import com.smartnotes.data.local.entity.NoteEntity
 import com.smartnotes.data.repository.NoteRepository as DataNoteRepository
+import com.smartnotes.ui.components.NoteType
 import com.smartnotes.ui.viewmodel.*
 import kotlinx.coroutines.flow.first
 import java.time.LocalDateTime
@@ -21,7 +22,6 @@ class NoteRepositoryAdapter @Inject constructor(
         search: String?
     ): Result<List<Note>> {
         return try {
-            noteRepository.refreshNotes()
             val allNotes = if (type != null) {
                 noteRepository.getNotesByType(type)
             } else {

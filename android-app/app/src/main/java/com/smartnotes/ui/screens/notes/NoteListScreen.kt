@@ -1,5 +1,7 @@
 package com.smartnotes.ui.screens.notes
 
+import com.smartnotes.R
+
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -16,6 +18,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.NoteAlt
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -42,6 +46,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -51,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -58,9 +64,11 @@ import com.smartnotes.ui.components.ConfirmDialog
 import com.smartnotes.ui.components.EmptyState
 import com.smartnotes.ui.components.ErrorMessage
 import com.smartnotes.ui.components.LoadingIndicator
+import com.smartnotes.ui.components.NetworkError
 import com.smartnotes.ui.components.NoteType
 import com.smartnotes.ui.components.NoteTypeBadge
 import com.smartnotes.ui.components.SmartNotesTopAppBar
+import com.smartnotes.ui.components.SyncStatusChip
 import com.smartnotes.ui.viewmodel.NotesUiState
 import com.smartnotes.ui.viewmodel.NoteFilter
 import com.smartnotes.ui.viewmodel.NoteViewModel
@@ -72,11 +80,12 @@ fun NoteListScreen(
     onNavigateToNoteEdit: (noteId: Long?) -> Unit,
     viewModel: NoteViewModel = hiltViewModel(),
 ) {
-    val notesState by viewModel.notesState
-    val isRefreshing by viewModel.isRefreshing
-    val searchQuery by viewModel.searchQuery
-    val activeFilter by viewModel.activeFilter
-    val deleteConfirmNoteId by viewModel.deleteConfirmNoteId
+    val notesState = viewModel.notesState.collectAsState().value
+    val isRefreshing = viewModel.isRefreshing.collectAsState().value
+    val searchQuery = viewModel.searchQuery.collectAsState().value
+    val activeFilter = viewModel.activeFilter.collectAsState().value
+    val deleteConfirmNoteId = viewModel.deleteConfirmNoteId.collectAsState().value
+    val syncStatus = viewModel.syncStatus.collectAsState().value
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
@@ -97,12 +106,18 @@ fun NoteListScreen(
     Scaffold(
         topBar = {
             SmartNotesTopAppBar(
-                title = "My Notes",
+                title = stringResource(R.string.my_notes),
                 actions = {
+                    if (syncStatus != com.smartnotes.data.api.SyncStatus.SYNCED) {
+                        SyncStatusChip(
+                            status = syncStatus,
+                            modifier = Modifier.padding(end = 4.dp),
+                        )
+                    }
                     IconButton(onClick = { viewModel.syncNotes() }) {
                         Icon(
                             imageVector = Icons.Default.Create,
-                            contentDescription = "Sync notes",
+                            contentDescription = stringResource(R.string.sync_now),
                         )
                     }
                 },
@@ -115,7 +130,7 @@ fun NoteListScreen(
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
-                    contentDescription = "Create new note",
+                    contentDescription = stringResource(R.string.create_note),
                 )
             }
         },
@@ -130,7 +145,7 @@ fun NoteListScreen(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { viewModel.updateSearchQuery(it) },
-                    placeholder = { Text("Search notes...") },
+                    placeholder = { Text(stringResource(R.string.search_notes)) },
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Default.Search,
@@ -141,11 +156,6 @@ fun NoteListScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        unfocusedBorderColor = Color.Transparent,
-                    ),
-                    shape = MaterialTheme.shapes.large,
                 )
 
                 // Filter tabs
@@ -161,11 +171,11 @@ fun NoteListScreen(
                 // Content
                 when (notesState) {
                     is NotesUiState.Loading -> {
-                        LoadingIndicator(message = "Loading notes...")
+                        LoadingIndicator(message = stringResource(R.string.loading_notes))
                     }
 
                     is NotesUiState.Error -> {
-                        ErrorMessage(
+                        NetworkError(
                             message = (notesState as NotesUiState.Error).message,
                             onRetry = { viewModel.refreshNotes() },
                         )
@@ -176,12 +186,17 @@ fun NoteListScreen(
                         if (notes.isEmpty()) {
                             EmptyState(
                                 message = if (searchQuery.isBlank()) {
-                                    "No notes yet. Tap + to create one!"
+                                    stringResource(R.string.empty_notes_title)
                                 } else {
-                                    "No notes match your search"
+                                    stringResource(R.string.empty_search_title)
                                 },
-                                icon = Icons.Default.Create,
-                                actionLabel = if (searchQuery.isBlank()) "Create Note" else null,
+                                subtitle = if (searchQuery.isBlank()) {
+                                    stringResource(R.string.empty_notes_message)
+                                } else {
+                                    stringResource(R.string.empty_search_message)
+                                },
+                                icon = Icons.Default.NoteAlt,
+                                actionLabel = if (searchQuery.isBlank()) stringResource(R.string.create_note) else null,
                                 onAction = if (searchQuery.isBlank()) {
                                     { onNavigateToNoteEdit(null) }
                                 } else {
@@ -243,11 +258,11 @@ fun NoteListScreen(
             // Delete confirmation dialog
             if (deleteConfirmNoteId != null) {
                 ConfirmDialog(
-                    title = "Delete Note",
-                    message = "Are you sure you want to delete this note? This action cannot be undone.",
+                    title = stringResource(R.string.delete_note),
+                    message = stringResource(R.string.delete_note_confirm),
                     onConfirm = { viewModel.deleteNote(deleteConfirmNoteId!!) },
                     onDismiss = { viewModel.dismissDeleteConfirm() },
-                    confirmButtonText = "Delete",
+                    confirmButtonText = stringResource(R.string.delete),
                 )
             }
         }
@@ -342,10 +357,18 @@ private fun NoteCard(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     NoteTypeBadge(type = note.type)
+                    if (note.type == NoteType.SECRET) {
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = stringResource(R.string.encrypted_note_label),
+                            modifier = Modifier.size(14.dp),
+                            tint = NoteType.SECRET.color,
+                        )
+                    }
                     if (note.isPinned) {
                         Icon(
                             imageVector = Icons.Default.PushPin,
-                            contentDescription = "Pinned",
+                            contentDescription = stringResource(R.string.pin_to_top),
                             modifier = Modifier.size(16.dp),
                             tint = MaterialTheme.colorScheme.primary,
                         )
@@ -358,7 +381,7 @@ private fun NoteCard(
                     ) {
                         Icon(
                             imageVector = Icons.Default.PushPin,
-                            contentDescription = if (note.isPinned) "Unpin" else "Pin",
+                            contentDescription = if (note.isPinned) stringResource(R.string.pin_to_top) else stringResource(R.string.pin_to_top),
                             modifier = Modifier.size(18.dp),
                             tint = if (note.isPinned) {
                                 MaterialTheme.colorScheme.primary
@@ -373,7 +396,7 @@ private fun NoteCard(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Delete,
-                            contentDescription = "Delete",
+                            contentDescription = stringResource(R.string.delete),
                             modifier = Modifier.size(18.dp),
                             tint = MaterialTheme.colorScheme.error,
                         )
@@ -384,7 +407,7 @@ private fun NoteCard(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = note.title.ifBlank { "Untitled" },
+                text = note.title.ifBlank { stringResource(R.string.untitled) },
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -395,7 +418,11 @@ private fun NoteCard(
             if (note.content.isNotBlank()) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = note.content,
+                    text = if (note.type == NoteType.SECRET && note.isEncrypted) {
+                        "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+                    } else {
+                        note.content
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
@@ -414,12 +441,14 @@ private fun NoteCard(
     }
 }
 
+@Composable
 private fun formatNoteDate(dateTime: java.time.LocalDateTime): String {
     val now = java.time.LocalDateTime.now()
+    val timeStr = dateTime.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
     return if (dateTime.toLocalDate() == now.toLocalDate()) {
-        "Today, ${dateTime.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))}"
+        stringResource(R.string.date_today, timeStr)
     } else if (dateTime.toLocalDate() == now.minusDays(1).toLocalDate()) {
-        "Yesterday, ${dateTime.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))}"
+        stringResource(R.string.date_yesterday, timeStr)
     } else {
         dateTime.format(java.time.format.DateTimeFormatter.ofPattern("MMM dd, HH:mm"))
     }
